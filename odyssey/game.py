@@ -63,6 +63,8 @@ class Game:
         self.machine.ram[0x2000:0x4000] = base64.b64decode(doc['memory'])
         self.machine.hires.dirty = True
         self.machine.hires.picture = self.identify_picture()
+        if self.machine.hires.picture:
+            self.machine.hires.rebuild_layer(asset(self.machine.hires.picture + '.hgr'))
 
     def identify_picture(self):
         """Which original picture the restored hi-res page shows (for enhanced display)."""

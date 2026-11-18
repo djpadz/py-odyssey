@@ -889,7 +889,7 @@ class Island(Part):
             m.home()
             m.invflg = 0x3F
             for _ in range(19):
-                self.say('                                       ')
+                self.say(' ' * 40, end='')     # (40 wide: the cursor wraps by itself)
             m.vtab(2)
             m.tab(11)
             if s.Z3 == 0:

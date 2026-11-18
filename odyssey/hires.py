@@ -49,6 +49,10 @@ class Hires:
         self.shapes = bytes(shape_table)
         self.collisions = 0       # PEEK(810)
         self.picture = None       # name of the picture last loaded (for enhanced display)
+        # The sprite layer: every DRAW/DRAW1 replayed on a page that starts out
+        # black.  The game never reads it; the enhanced display shows it over
+        # the repainted pictures, so sprites look the same on any background.
+        self.layer = bytearray(0x2000)
         self.dirty_rows = set(range(HEIGHT))
 
     @property
@@ -65,6 +69,13 @@ class Hires:
     # --- whole screen -----------------------------------------------------------------
     def load(self, data):
         self.mem[:] = data[:0x2000].ljust(0x2000, b'\0')
+        self.layer[:] = bytes(0x2000)
+        self.dirty = True
+
+    def rebuild_layer(self, picture):
+        """After restoring a saved screen: whatever differs from the original
+        `picture` (its bytes) is taken to be sprites."""
+        self.layer[:] = bytes((a ^ b) & 0x7F for a, b in zip(self.mem, picture))
         self.dirty = True
 
     def fill(self, color):
@@ -72,6 +83,7 @@ class Hires:
         c0, c1 = color & 0xFF, shift_color(color & 0xFF)
         # Every row starts at an even address, so odd addresses are odd columns.
         self.mem[:] = bytes([c0, c1]) * 0x1000
+        self.layer[:] = bytes(0x2000)
         self.dirty = True
 
     def clear(self):
@@ -99,6 +111,7 @@ class Hires:
         coll = 0
         sh = self.shapes
         touched = self.dirty_rows
+        layer = self.layer
         while True:
             b = sh[p]
             if b == 0:
@@ -130,12 +143,15 @@ class Hires:
                                 else:
                                     coll += 1
                                     mem[addr] = old ^ (0x7F & mask)
+                                layer[addr] ^= 0x7F & mask
                             else:
                                 d = (old ^ c) & mask
                                 if d:
                                     mem[addr] = old ^ d
                                 else:
                                     coll += 1
+                                lo = layer[addr]
+                                layer[addr] = lo ^ ((lo ^ c) & mask)
                         d = (b + quad + extra) & 3
                         if d == 0:
                             y = y - 1 if y else HEIGHT - 1
@@ -153,7 +169,7 @@ class Hires:
         return self.collisions
 
     # --- display ----------------------------------------------------------------------
-    def render_row(self, y, palette):
+    def render_row(self, y, palette, page=None):
         """Colours of the 280 pixels of row y.
 
         Simple colour model: a lit pixel next to another lit pixel is white;
@@ -165,7 +181,7 @@ class Hires:
         base = ROW[y]
         bits = []
         hi = []
-        for v in self.mem[base:base + 40]:
+        for v in (self.mem if page is None else page)[base:base + 40]:
             h = v & 0x80
             for i in range(7):
                 bits.append((v >> i) & 1)

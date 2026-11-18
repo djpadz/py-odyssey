@@ -329,12 +329,24 @@ class Machine:
         self.print(s)
 
     # --- line input ------------------------------------------------------------------------
-    def getln(self, prompt='?'):
+    def _cursor(self, on):
+        """The flashing block where the next character will go."""
+        if self.ch < 40:
+            self.ram[self._row_addr(self.cv) + self.ch] = 0x60 if on else 0xA0
+            self.text_dirty = True
+
+    def getln(self, prompt='?', digits=False):
+        """Read a line, with a flashing cursor.  With `digits`, only a number
+        from 0 to 32767 can be typed (so Integer BASIC's RETYPE LINE never comes up)."""
         self.write(prompt)
         buf = []
         while True:
+            self._cursor(True)
             k = self.wait_key() & 0x7F
+            self._cursor(False)
             if k == 0x0D:
+                if digits and not buf:
+                    continue
                 self.cout(0x0D)
                 return ''.join(buf)
             if k in (0x08, 0x7F):
@@ -346,21 +358,19 @@ class Machine:
                 self.cout(0x0D)
                 buf = []
                 self.write(prompt)
+            elif digits:
+                if chr(k).isdigit() and int(''.join(buf) + chr(k)) <= 32767:
+                    buf.append(chr(k))
+                    self.cout(k)
             elif k >= 0x20 and len(buf) < 239:
                 ch = chr(k).upper()
                 buf.append(ch)
                 self.cout(ord(ch))
 
     def input_number(self, prompt=''):
-        """INPUT "PROMPT",N"""
+        """INPUT "PROMPT",N - digits only."""
         self.write(prompt)
-        while True:
-            line = self.getln('?').strip()
-            try:
-                v = int(line)
-                return clip16(v)
-            except (ValueError, BasicError):
-                self.print('RETYPE LINE')
+        return int(self.getln('?', digits=True))
 
     def input_string(self, prompt=''):
         self.write(prompt)

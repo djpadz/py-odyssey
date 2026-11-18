@@ -6,8 +6,8 @@ Two looks (F2 switches between them; --classic starts in the second):
              fortress) are replaced by repainted artwork (odyssey/assets/art,
              made by tools/render_art.py).  Whatever the game draws on top of a
              picture - the party, ships, monsters, site markers - is found by
-             comparing the hi-res page with the original picture, and drawn over
-             the art as crisp square pixels.  Any other hi-res screen is
+             replaying its drawing on a black sprite layer (hires.py), and is
+             drawn over the art as crisp square pixels.  Any other hi-res screen is
              smoothed with EPX.
              Text and lo-res graphics stay crisp.
   classic  - exactly the Apple's 280x192 pixels, scaled up.
@@ -199,18 +199,19 @@ class Window(RealTime):
         base = self._baseline(h.picture) if h.picture else None
         pa = pygame.PixelArray(self.hires_rgb)
         po = pygame.PixelArray(self.overlay)
+        black = HIRES_PALETTE[0]
         for y in rows:
             row = h.render_row(y, HIRES_PALETTE)
+            sprites = h.render_row(y, HIRES_PALETTE, h.layer)
             ref = base[y] if base else None
             n = 0
             for x in range(WIDTH):
                 c = row[x]
                 pa[x, y] = c
                 if ref is None or c != ref[x]:
-                    po[x, y] = c
                     n += 1
-                else:
-                    po[x, y] = KEY
+                sc = sprites[x]
+                po[x, y] = KEY if sc == black else sc
             self.overlay_rows[y] = n
         del pa, po
 
@@ -273,10 +274,9 @@ class Window(RealTime):
                 art = self._art(m.hires.picture, (dw, dh))
             if art is not None:
                 out.blit(art, (dx, dy), (0, 0, dw, gh))
-                if any(shown_rows):
-                    ov = pygame.transform.scale(self.overlay, (dw, dh))     # icons stay square
-                    ov.set_colorkey(KEY)
-                    out.blit(ov, (dx, dy), (0, 0, dw, gh))
+                ov = pygame.transform.scale(self.overlay, (dw, dh))         # icons stay square
+                ov.set_colorkey(KEY)
+                out.blit(ov, (dx, dy), (0, 0, dw, gh))
             else:
                 out.blit(self._smooth(dw, dh, k), (dx, dy), (0, 0, dw, gh))
             if gfx < HEIGHT:                         # the text window stays crisp
