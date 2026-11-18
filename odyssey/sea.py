@@ -20,7 +20,7 @@ always collides with itself 33 times, any more means land.
   X2 set while a message is up: no events and no position read-outs.
 """
 from . import data
-from .apple import BasicError
+from .apple import BasicError, BASIC_STATEMENT, NEXT_TIME, PEEK_TERM
 from .part import Part, Goto, Chain, GameOver, idiv, imod, sgn, substr, put
 
 GW, AP = data.ITEM_WEIGHT, data.ITEM_PRICE
@@ -52,7 +52,7 @@ class Sea(Part):
     # ----------------------------------------------------------------------------------
     def L10(self):
         s, m = self.s, self.m
-        m.hgr_load(self.game.asset('seamap.hgr'))
+        m.hgr_load(self.game.asset('seamap.hgr'), 'seamap')
         if s.EN == 10:
             return 600
         s.LC = list(data.SEA_MAP)
@@ -100,8 +100,9 @@ class Sea(Part):
         self.m.sound(40, None, 2)
 
     def cannon(self):
-        """865 / 20051: a cannon shot (raw speaker clicks)."""
-        self.m.clicks(105, 0.0007)
+        """865 / 20051, one pass: C=PEEK(-16336)+...(5 times): A=PEEK(-16336)+PEEK(-16336): NEXT I"""
+        p = PEEK_TERM
+        self.m.clicks([p, p, p, p, BASIC_STATEMENT - p, p, NEXT_TIME + BASIC_STATEMENT - p])
 
     # ----------------------------------------------------------------------------------
     # 55: is anybody left?
@@ -119,9 +120,7 @@ class Sea(Part):
         s.COLR = 127
         self.xdraw()
         self.key99()
-        m.text()
-        m.home()
-        raise GameOver()
+        raise GameOver(died=True, dismissed=True)
 
     # ----------------------------------------------------------------------------------
     # 90-150: the ship under way (all of this runs inside GOSUB 100)
@@ -267,7 +266,8 @@ class Sea(Part):
         """30000: a flash shows the chart for a moment."""
         m = self.m
         m.switch(-16297)
-        m.clicks(60, 0.0004)
+        p, st = PEEK_TERM, BASIC_STATEMENT          # C=PEEK+PEEK: C=PEEK: C=PEEK+PEEK+PEEK: NEXT I
+        m.clicks([p, st, st, p, p, NEXT_TIME + st - p], 10)
         m.switch(-16298)
 
     def edge_warning(self):
@@ -304,8 +304,7 @@ class Sea(Part):
         m.text()
         m.home()
         m.vtab(10)
-        self.say("TO RECOVER YOUR SHIP, TYPE 'GOTO 31000'")
-        raise GameOver()
+        raise GameOver(resume=(31000, 'RECOVER YOUR SHIP'))      # (was: TYPE 'GOTO 31000')
 
     def L31000(self):
         s = self.s
@@ -1369,7 +1368,7 @@ class Sea(Part):
         if home:
             m.home()
         self.say('\rIT LOOKS LIKE THE FOG IS CLEARING UP.')
-        m.hgr_load(self.game.asset('seamap.hgr'))
+        m.hgr_load(self.game.asset('seamap.hgr'), 'seamap')
         s.COLR = 127
         self.draw()
         if s.PG == 6:
@@ -1605,7 +1604,7 @@ class Sea(Part):
                 s.X0, s.Y0 = s.ST + 20, s.Y + 3
             if mm == 3:
                 s.X0, s.Y0 = s.ST + 16, s.Y + 14
-            m.clicks(1, 0.001)                                       # 20060: the explosion
+            m.clicks([BASIC_STATEMENT])                              # 20060: the explosion
             s.COLR = 85
             s.SHAPE = 11
             self.draw()
@@ -1624,7 +1623,7 @@ class Sea(Part):
             s.SHAPE = 15
             self.draw()
             s.COLR = 0
-            m.clicks(3, 0.001)
+            m.clicks([BASIC_STATEMENT, PEEK_TERM, BASIC_STATEMENT])
             m.pause(20)
             s.SHAPE = 9                                              # 20070: she sinks
             s.Y0 += 3

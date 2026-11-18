@@ -12,7 +12,7 @@ LC(col*20 + row + 1).  A cell value is TTQQII:
 A sealed site gets 100 added, so LC MOD 1000 is no longer 51-56.
 """
 from . import data
-from .apple import BasicError
+from .apple import BasicError, BASIC_STATEMENT, NEXT_TIME
 from .part import Part, Goto, Chain, GameOver, idiv, imod, sgn, substr, put
 
 GW, AP = data.ITEM_WEIGHT, data.ITEM_PRICE
@@ -103,9 +103,7 @@ class Island(Part):
         s.COLR = 127
         self.xdraw()
         self.key99()
-        m.text()
-        m.home()
-        raise GameOver()
+        raise GameOver(died=True, dismissed=True)
 
     # ----------------------------------------------------------------------------------
     # 300: work out where we are.  TT = terrain, C1/QT = object here, DR() = the
@@ -1577,7 +1575,7 @@ class Island(Part):
                 return 700
             self.wait40()                                            # 8116
             m.switch(-16299)
-            m.clicks(idiv(s.QT, 10), 0.0015)
+            m.clicks([BASIC_STATEMENT + NEXT_TIME], idiv(s.QT, 10))     # J=PEEK(-16336): NEXT I
             m.switch(-16300)
             m.home()                                                 # 8117
             self.say('\rSOME ROCKS NEARBY WERE TRANSMUTED INTO\rGOLD. ', s.QT, ' QUADROONS WORTH!')

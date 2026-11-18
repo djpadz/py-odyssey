@@ -28,7 +28,19 @@ class Chain(Exception):
 
 
 class GameOver(Exception):
-    """END - the program stopped."""
+    """END - the program stopped.
+
+    `died` means the party is lost: the game closes once the message has been
+    dismissed (`dismissed` says whether the player has already pressed a key).
+    Otherwise the player gets a menu: carry on (if `resume` offers it), start a
+    new quest, or leave.
+    """
+
+    def __init__(self, died=False, dismissed=False, resume=None):
+        super().__init__()
+        self.died = died
+        self.dismissed = dismissed
+        self.resume = resume          # (line, label): an offer to carry on from `line`
 
 
 ARRAYS = {'LC': 401, 'BG': 71, 'BQ': 71, 'MG': 14, 'QTA': 14, 'CP': 14,
@@ -376,9 +388,6 @@ class Part:
     def entries(self):
         """Lines that the program can be (re)entered at: {line: method}."""
         return {}
-
-    def has_line(self, n):
-        return n in self.entries()
 
     def run(self, line):
         entries = self.entries()

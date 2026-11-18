@@ -176,12 +176,65 @@ class Fortress(unittest.TestCase):
         self.assertIn('YOUR COMPOSITE SCORE IS', t)
 
     def test_without_the_orb(self):
-        g, fe = make_game(['A'] * 7, seed=2)
+        g, fe = make_game(['A'] * 7 + [RET], seed=2)
         s = outfit(g, men=200)
         s.Z15, s.Z8 = 1, 0
-        run(g, 'cavern', 10)
+        with self.assertRaises(Quit):              # the force is lost: a key, then the game closes
+            g.play('cavern', 10)
         self.assertIn("WITHOUT THEHIGH ONE'S ORB", text(fe))
         self.assertEqual(g.state.FM, 0)
+
+    def test_win_offers_new_quest_or_leave(self):
+        g, fe = make_game(['A'] * 7 + ['2', '2'], seed=2)   # (a key pressed early is discarded)
+        s = outfit(g, men=200)
+        s.Z15, s.Z8 = 1, 2
+        with self.assertRaises(Quit):              # 2 = leave
+            g.play('cavern', 10)
+        t = text(fe)
+        self.assertIn('1. START A NEW QUEST', t)
+        self.assertIn('2. LEAVE THE GAME', t)
+
+
+class Menu(unittest.TestCase):
+    def test_recover_ship_after_falling_off_the_world(self):
+        g, fe = make_game([RET, '1', '1'], seed=1)
+        s = outfit(g)
+        s.X0, s.Y0 = 205, 117
+        s.X, s.Y = 300, 117                         # past the eastern edge
+        sea_part = __import__('odyssey.sea', fromlist=['Sea']).Sea(g)
+        g.machine.hgr_load(asset('seamap.hgr'), 'seamap')
+        s.SHAPE, s.COLR, s.SCALE = 17, 127, 1
+        with self.assertRaises(ScriptEnd):
+            g.play('sea', 5100)
+        t = text(fe)
+        self.assertIn('YOUR SHIP WAS LOST', t)
+        self.assertIn('1. RECOVER YOUR SHIP', t)
+        self.assertIn('THE WIND IS OUT OF THE', t)   # back at sea after choosing 1
+
+
+class Death(unittest.TestCase):
+    def test_island_death_closes_after_key(self):
+        g, fe = make_game(['C', RET, RET, RET], seed=1)   # (the pause before it eats keys)
+        s = outfit(g)
+        s.FM = 0
+        s.LC = list(data.ISLAND_MAP)
+        g.machine.hgr_load(asset('island1.hgr'), 'island1')
+        s.X = s.X0, s.Y0 = 100, 80
+        s.X, s.SHAPE, s.COLR, s.SCALE = 100, 2, 85, 1
+        with self.assertRaises(Quit):
+            g.play('island', 700)
+        self.assertIn('BETTER LUCK NEXT TIME', text(fe))
+
+    def test_catacombs_death_waits_for_a_key(self):
+        g, fe = make_game([], seed=4)
+        outfit(g).FM = 0
+        with self.assertRaises(ScriptEnd):         # message up, waiting for the key
+            g.play('cavern', 10)
+        self.assertIn('BETTER LUCK NEXT TIME', text(fe))
+        g2, fe2 = make_game([RET], seed=4)
+        outfit(g2).FM = 0
+        with self.assertRaises(Quit):
+            g2.play('cavern', 10)
 
 
 class Catacombs(unittest.TestCase):

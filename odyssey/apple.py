@@ -34,6 +34,14 @@ NORMAL, INVERSE, FLASH = 0xFF, 0x3F, 0x7F
 # loops in the original (FOR C=1 TO D: NEXT C) are converted to real time with it.
 STATEMENT_TIME = 0.0006
 
+# The Apple II's 6502 runs at 1.0227 MHz.  Sound timing is worked out from
+# cycle counts, and the BASIC statements around a sound (POKE ...: CALL 834)
+# take about a millisecond each - the gaps they leave are part of the sound.
+CPU_HZ = 1_022_727
+BASIC_STATEMENT = 0.0011
+PEEK_TERM = 0.00045            # one more PEEK(-16336) inside an expression
+NEXT_TIME = 0.0013             # NEXT, round the loop
+
 
 class BasicError(Exception):
     """An Integer BASIC run-time error (the original would stop with '*** ... ERR')."""
@@ -86,10 +94,7 @@ class Frontend:
     def echo(self, c):
         pass
 
-    def tone(self, half_period, count):
-        pass
-
-    def clicks(self, n, spacing):
+    def clicks(self, intervals):
         pass
 
 
@@ -411,8 +416,10 @@ class Machine:
         self.hires.dirty = True
 
     # --- hi-res -----------------------------------------------------------------------------
-    def hgr_load(self, data):
+    def hgr_load(self, data, name=None):
+        """BLOAD a picture into hi-res page 1; `name` lets a frontend show redrawn art for it."""
         self.hires.load(data)
+        self.hires.picture = name
 
     def draw(self, shape, x, y, color, rot=0, scale=1, xor=False):
         try:
@@ -436,16 +443,20 @@ class Machine:
         n = self.ram[0x341] + 1 + 256 * ((self.ram[0x35C] - 1) & 0xFF)
         self.ram[0x341] = 0
         self.ram[0x35C] = 0
-        a = self.ram[0x340]
-        # monitor WAIT: 0.5*(26+27A+5A^2) microseconds, plus the loop itself
-        half = (0.5 * (26 + 27 * a + 5 * a * a) + 25) / 1_023_000
-        self.frontend.tone(half, n)
+        a = self.ram[0x340] or 256
+        # Each click: LDA $C030, LDA/JSR WAIT, LDA/BNE, DEC, JMP = 30 cycles,
+        # plus the monitor's WAIT itself, 2.5A^2 + 13.5A + 7 cycles.
+        half = (2.5 * a * a + 13.5 * a + 37) / CPU_HZ
+        self.tick((3 + (length is not None)) * BASIC_STATEMENT + NEXT_TIME)   # POKEs, CALL, NEXT
+        self.frontend.clicks([half] * n)
         self.tick(half * n)
 
-    def clicks(self, n, spacing):
-        """Toggle the speaker `n` times, `spacing` seconds apart (PEEK(-16336) loops)."""
-        self.frontend.clicks(n, spacing)
-        self.tick(n * spacing)
+    def clicks(self, intervals, repeat=1):
+        """Speaker clicks from a PEEK(-16336) loop: `intervals` are the seconds
+        between successive clicks (one loop pass), played `repeat` times."""
+        pattern = list(intervals) * repeat
+        self.frontend.clicks(pattern)
+        self.tick(sum(pattern))
 
     def beep(self):
         self.sound(12, 200, 1)

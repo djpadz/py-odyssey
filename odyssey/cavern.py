@@ -19,7 +19,7 @@ the screen taken on arrival, so the party gropes about in the dark.
   Z15 set while at the fortress on the Isle of Lapour (line 20000 on)
 """
 from . import data
-from .apple import BasicError, Quit
+from .apple import BasicError, Quit, BASIC_STATEMENT, NEXT_TIME
 from .part import Part, Goto, Chain, GameOver, idiv, imod, sgn, substr, put
 
 GW, AP = data.ITEM_WEIGHT, data.ITEM_PRICE
@@ -171,7 +171,7 @@ class Cavern(Part):
         for k in range(1, 7):
             m.set_color(4 * ((k % 2) + 1))
             m.plot(s.X2, s.Y2)
-            m.clicks(25, 0.002)
+            m.clicks([BASIC_STATEMENT + NEXT_TIME], 25)     # A=PEEK(-16336): NEXT L
         s.M, s.L = 7, 26
 
     def sound145(self):
@@ -232,7 +232,7 @@ class Cavern(Part):
         """22-60: the frenzies dart about, homing in on the party."""
         s, m = self.s, self.m
         while True:
-            m.clicks(1, 0.0005)
+            m.clicks([BASIC_STATEMENT])
             nx, ny = (s.X0 + s.SX + 40) % 40, (s.Y0 + s.SY + 40) % 40
             s.V = m.scrn(nx, ny)
             if s.V == s.C:
@@ -263,7 +263,14 @@ class Cavern(Part):
         s.FM -= 2
         m.set_color(s.BKG)
         m.plot(s.X0, s.Y0)
-        m.clicks(100, 0.002)
+        # FOR V=1 TO 60: FOR J=1 TO 5: IF V MOD 3=0 THEN 28: A=PEEK(-16336): NEXT J: 28 NEXT V
+        pattern = []
+        for v in range(1, 61):
+            if v % 3:
+                pattern += [2 * BASIC_STATEMENT + NEXT_TIME] * 5
+            elif pattern:
+                pattern[-1] += BASIC_STATEMENT + NEXT_TIME
+        m.clicks(pattern)
 
     # ----------------------------------------------------------------------------------
     # 160-185: the borer creeps toward the party, boring through walls
@@ -1146,7 +1153,7 @@ class Cavern(Part):
         m.vtab(5)
         self.say('I AM SORRY TO REPORT, MY LEIGE, THAT ALLTHE MEMBERS OF YOUR PARTY WERE KILLED.')
         self.say('\r\rBETTER LUCK NEXT TIME, SIRE.')
-        raise GameOver()
+        raise GameOver(died=True)
 
     def altar(self):
         s, m = self.s, self.m
@@ -1163,7 +1170,7 @@ class Cavern(Part):
         s, m = self.s, self.m
         s.U1 = s.U2 = s.U3 = s.U4 = s.J = 0
         s.Z15 = 1
-        m.hgr_load(self.game.asset('island2.hgr'))
+        m.hgr_load(self.game.asset('island2.hgr'), 'island2')
         s.X0, s.Y0 = 150, 150
         s.SHAPE = 2
         self.xdraw()
@@ -1397,4 +1404,4 @@ class Cavern(Part):
             self.say('A KIND AND GENEROUS\rLEADER.)')
         else:
             self.say('A VIRTUAL SAINT AMONG\rMEN.)')
-        raise GameOver()
+        raise GameOver(died=s.FM < 1)               # without the orb the force was destroyed

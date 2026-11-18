@@ -17,12 +17,27 @@ As a result the screens, timing, sounds and even the quirks match the original.
 ## Playing
 
 ```
-uv run odyssey               # options: --scale N, --no-sound, --save FILE, --seed N
+uv run odyssey     # options: --classic, --scale N, --no-sound, --save FILE, --seed N
 ```
 
 `uv` creates the environment and installs the one dependency (`pygame-ce`)
 on first run. You can also install it as a command with `uv tool install .`.
 Without uv: `pip install .` then `odyssey`.
+
+By default the game uses **enhanced graphics**:
+- The title screen, the island, the sea chart and the fortress are repainted
+  at high resolution.
+  - The title is set in blackletter, with a shaded, scaled dragon.
+  - The maps get painted seas with shallows and surf, beaches, terrain, snowy
+    mountains, a river, a compass rose and a stone castle.
+- Everything the game draws on top (the party, ships, monsters, site markers)
+  appears over the art.
+- The text and the lo-res catacombs keep their original crisp look.
+
+`--classic` shows exactly the Apple II's pixels instead, and **F2** switches
+between the two while playing. The window can be resized and draws at the
+screen's full (Retina) resolution; **F11** (or Alt/Cmd-Return) toggles full
+screen.
 
 Press **N** for a new quest or **P** to continue a saved one. Every command is
 a single key, and an unknown key lists the commands available:
@@ -38,13 +53,16 @@ a single key, and an unknown key lists the commands available:
 `odyssey-old-game.json`, then closes the window. Press **P** at the title to
 continue a saved game.
 
-When the game ends any other way (the party is lost, the quest is won, the
-ship falls off the edge of the world), you land at the Integer BASIC `>`
-prompt, as on the Apple:
-- `GOTO 31000` rescues a ship that sailed off the edge of the world.
-- `GOTO 32000` re-enters the game after a run-time error.
-- `RUN` starts over.
-- `BYE` exits.
+If your party is lost, the game closes once you press a key to dismiss the
+message.
+
+When the game ends any other way, a menu offers to start a new quest or
+leave. Two endings add an option to carry on:
+- If your ship sails off the edge of the world, you can recover it.
+- After a run-time error, you can continue the quest.
+
+The original left you at the Integer BASIC `>` prompt here, to type
+`GOTO 31000`, `GOTO 32000` or `RUN`.
 
 The quest: on the island, buy a ship at the city in the north and sail
 away with at least 15 men. At sea, find the High One's Orb. It lies in the
@@ -61,17 +79,21 @@ flash quickly through random colours, exactly as the original did.
 |---|---|
 | `odyssey/apple.py` | The Apple II model: 64K memory with text/lo-res pages, text window and cursor, display switches, keyboard latch, speaker routine, timing, Integer BASIC arithmetic. |
 | `odyssey/hires.py` | The hi-res page and an exact port of the Programmer's Aid `DRAW`/`DRAW1` routines (rotation, scale, colour and the collision counter). |
-| `odyssey/screen.py` | pygame-ce window: renders the screen memory (NTSC-style colour), keyboard, speaker. |
+| `odyssey/screen.py` | pygame-ce window: renders the screen memory (NTSC-style colour) in the enhanced or classic look, keyboard, speaker. |
 | `odyssey/part.py` | Shared machinery: the variable `State`, item names, inventory, menus, quitting. |
 | `odyssey/island.py`, `sea.py`, `cavern.py` | The three programs: ISLAND, SEA and CAVERN APVENTURE. |
-| `odyssey/game.py` | HAIL (title, character rolls, island setup), CHAIN between parts, save/restore, the `>` prompt. |
+| `odyssey/game.py` | HAIL (title, character rolls, island setup), CHAIN between parts, save/restore, the end-of-game menu. |
 | `odyssey/data.py`, `odyssey/assets/` | Tables, maps, pictures and shapes extracted from the disk. |
+| `odyssey/assets/art/` | The repainted pictures for the enhanced graphics. |
 | `tools/` | The reverse-engineering tools: DOS 3.3 reader, Integer BASIC detokenizer, variable-table parser, asset extractor, string checker. |
 | `src_listings/` | The detokenized original programs (control characters shown as `{^M}`, `{^G}`). |
 | `tests/` | Scenario tests (`uv run python -m unittest discover tests`). |
 
 `odyssey/data.py` and `odyssey/assets/` are generated with
-`python3 tools/extract_assets.py Odyssey_TheCompleatAdv.dsk`. For the listings,
+`python3 tools/extract_assets.py Odyssey_TheCompleatAdv.dsk`. The repainted pictures in
+`odyssey/assets/art/` are made by
+`uv run --with pillow --with numpy --with scipy python tools/render_art.py`, using the
+OFL-licensed fonts in `tools/fonts/` (UnifrakturCook and IM Fell English). For the listings,
 first unpack the disk with `python3 tools/dos33.py Odyssey_TheCompleatAdv.dsk extracted/game`,
 then run `python3 tools/intbasic.py extracted/game/<FILE>.I`.
 
@@ -147,4 +169,4 @@ error or hang have been given the obvious fix:
 | island edges | map look-ups past the edge stop with a RANGE ERR | read as open sea |
 
 Any other run-time error is reported the way Integer BASIC did
-(`*** RANGE ERR`) at the `>` prompt. From there you can `GOTO 32000`.
+(`*** RANGE ERR`), followed by the menu, where you can continue the quest.

@@ -1,4 +1,4 @@
-"""Run the game:  python3 -m odyssey [--scale N] [--no-sound] [--save FILE]"""
+"""Run the game:  odyssey [--scale N] [--classic] [--no-sound] [--save FILE]"""
 import argparse
 import random
 import sys
@@ -7,6 +7,8 @@ import sys
 def main(argv=None):
     ap = argparse.ArgumentParser(prog='odyssey', description='Odyssey: The Compleat Apventure (1980), in Python.')
     ap.add_argument('--scale', type=int, default=3, help='window size as a multiple of 280x192 (default 3)')
+    ap.add_argument('--classic', action='store_true',
+                    help="show the Apple II's own pixels instead of the repainted pictures (F2 switches)")
     ap.add_argument('--no-sound', action='store_true', help='keep the speaker quiet')
     ap.add_argument('--save', default='odyssey-old-game.json', metavar='FILE',
                     help="where the 'OLD GAME' is saved (default: %(default)s)")
@@ -20,7 +22,7 @@ def main(argv=None):
     from .apple import Quit
     from .game import Game
 
-    window = Window(scale=args.scale, sound=not args.no_sound)
+    window = Window(scale=args.scale, sound=not args.no_sound, style='classic' if args.classic else 'enhanced')
     rng = random.Random(args.seed) if args.seed is not None else None
     game = Game(window, save_path=args.save, rng=rng)
     try:

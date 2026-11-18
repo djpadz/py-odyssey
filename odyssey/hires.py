@@ -48,6 +48,7 @@ class Hires:
         self.mem = mem if mem is not None else memoryview(bytearray(0x2000))
         self.shapes = bytes(shape_table)
         self.collisions = 0       # PEEK(810)
+        self.picture = None       # name of the picture last loaded (for enhanced display)
         self.dirty_rows = set(range(HEIGHT))
 
     @property

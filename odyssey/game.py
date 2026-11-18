@@ -23,6 +23,7 @@ from .sea import Sea
 from .cavern import Cavern
 
 PARTS = {'island': Island, 'sea': Sea, 'cavern': Cavern}
+PICTURES = ('logo', 'island1', 'island2', 'seamap')
 FIRST_LINE = {'island': 600, 'sea': 10, 'cavern': 10}   # where each program starts
 
 
@@ -61,6 +62,18 @@ class Game:
         self.state = State.from_dict(doc['state'])
         self.machine.ram[0x2000:0x4000] = base64.b64decode(doc['memory'])
         self.machine.hires.dirty = True
+        self.machine.hires.picture = self.identify_picture()
+
+    def identify_picture(self):
+        """Which original picture the restored hi-res page shows (for enhanced display)."""
+        mem = bytes(self.machine.ram[0x2000:0x4000])
+        best, score = None, 0.0
+        for name in PICTURES:
+            ref = asset(name + '.hgr')
+            same = sum(a == b for a, b in zip(mem, ref)) / len(ref)
+            if same > score:
+                best, score = name, same
+        return best if score > 0.7 else None
 
     # --- HAIL ---------------------------------------------------------------------------
     def hail(self):
@@ -68,7 +81,7 @@ class Game:
         m = self.machine
         m.text()
         m.home()
-        m.hgr_load(asset('logo.hgr'))
+        m.hgr_load(asset('logo.hgr'), 'logo')
         m.switch(-16304)
         m.switch(-16297)
         m.switch(-16302)
@@ -147,7 +160,7 @@ class Game:
         s.LC = list(data.ISLAND_MAP)
         s.BG[1] = 1
         s.Z20 = s.STR
-        m.hgr_load(asset('island1.hgr'))
+        m.hgr_load(asset('island1.hgr'), 'island1')
         island = Island(self)
         island.draw()                     # the city at 63,16 (SHAPE 16 = city)
         for i in (1, 2):                  # two more cities
@@ -204,39 +217,41 @@ class Game:
                 name, line = c.part, FIRST_LINE[c.part]
                 continue
             except GameOver as g:
-                resume = self.basic_prompt(p, g)
-                if resume is None:
-                    raise Restart()
-                line = resume
+                if g.died:                       # the party is lost: close the game
+                    if not g.dismissed:
+                        self.machine.wait_key()
+                    raise Quit()
+                line = self.end_menu(g.resume)
             except BasicError as e:
                 self.machine.print()
                 self.machine.print('*** %s ERR' % e)
-                resume = self.basic_prompt(p, None)
-                if resume is None:
-                    raise Restart()
-                line = resume
+                line = self.end_menu((32000, 'CONTINUE THE QUEST'))
 
-    def basic_prompt(self, part, over):
-        """After END: an Integer BASIC '>' prompt.  GOTO <line> re-enters the
-        game (the game itself suggests GOTO 32000); RUN starts a new game."""
+    def end_menu(self, resume=None):
+        """What next, when the program has ENDed (the original left you at the
+        BASIC '>' prompt to type GOTO 31000/32000 or RUN).  `resume` is an
+        optional (line, label) for carrying on.  Returns the line to resume at."""
         m = self.machine
         m.set_window(top=0, bottom=24)
         m.invflg = 0xFF
+        choices = ([resume] if resume else []) + [(None, 'START A NEW QUEST'), ('quit', 'LEAVE THE GAME')]
+        m.print()
+        for n, (_, label) in enumerate(choices, 1):
+            m.tab(4)
+            m.print(n, '. ', label)
+        m.tab(4)
+        m.print('WHICH (1-%d)?' % len(choices), end='')
+        m.clear_strobe()
         while True:
-            m.print()
-            line = m.getln('>').replace(' ', '')
-            if line.startswith('GOTO') and line[4:].isdigit():
-                n = int(line[4:])
-                if part.has_line(n):
-                    return n
-                m.print('*** BAD BRANCH ERR')
-                continue
-            if line in ('RUN', 'NEW'):
-                return None
-            if line in ('BYE', 'QUIT', 'EXIT'):
-                raise Quit()
-            if line:
-                m.print('*** SYNTAX ERR')
+            k = m.wait_key() - 176
+            if 1 <= k <= len(choices):
+                break
+        what = choices[k - 1][0]
+        if what == 'quit':
+            raise Quit()
+        if what is None:
+            raise Restart()
+        return what
 
 
 class Restart(Exception):
