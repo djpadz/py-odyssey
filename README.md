@@ -12,7 +12,9 @@ into Python. The parts of the Apple II the game depends on are re-implemented:
 - the keyboard latch
 - the speaker
 
-As a result the screens, timing, sounds and even the quirks match the original.
+As a result the game logic, timing, sounds and even the quirks match the
+original. The screens do too with `--classic`; by default the pictures are
+repainted (see below).
 
 ## Playing
 
@@ -49,20 +51,19 @@ a single key, and an unknown key lists the commands available:
 | Catacombs | **N S E W** · **L**ight · **D**own · **O**ut · **T**eleport · **B**urrow · **U**se · **P**ut · **G**et · **C** · **I** · **Q** |
 | Fortress | **A**pproach · **R**etreat · **U**se · **C** · **I** · **Q** |
 
-**Q** quits: it offers to save the game (the original's "OLD GAME" disk) to
-`odyssey-old-game.json`, then closes the window. Press **P** at the title to
-continue a saved game.
+### How a game ends
 
-If your party is lost, the game closes once you press a key to dismiss the
-message.
+| What happens | What you see | Then |
+|---|---|---|
+| You press **Q** | "QUIT GAME?" then "SAVE GAME?" (saving writes `odyssey-old-game.json`) | The window closes. Press **P** at the title next time to continue. |
+| Your party is lost, anywhere | The death message | Press any key and the window closes. |
+| You storm the fortress without the High One's Orb | Your force is destroyed, then your final score | Press any key and the window closes. |
+| You take the fortress with the orb | Your final score and alignment | A menu: **1** start a new quest, **2** leave. |
+| Your ship sails off the edge of the world | "Your ship was lost..." | A menu: **1** recover your ship and sail on, **2** start a new quest, **3** leave. |
+| A run-time error (see [Faithfulness](#faithfulness)) | `*** RANGE ERR` or similar | A menu: **1** continue the quest, **2** start a new quest, **3** leave. |
 
-When the game ends any other way, a menu offers to start a new quest or
-leave. Two endings add an option to carry on:
-- If your ship sails off the edge of the world, you can recover it.
-- After a run-time error, you can continue the quest.
-
-The original left you at the Integer BASIC `>` prompt here, to type
-`GOTO 31000`, `GOTO 32000` or `RUN`.
+The menus ignore keys pressed before they appear, so you can't skip one by
+accident.
 
 The quest: on the island, buy a ship at the city in the north and sail
 away with at least 15 men. At sea, find the High One's Orb. It lies in the
@@ -169,4 +170,16 @@ error or hang have been given the obvious fix:
 | island edges | map look-ups past the edge stop with a RANGE ERR | read as open sea |
 
 Any other run-time error is reported the way Integer BASIC did
-(`*** RANGE ERR`), followed by the menu, where you can continue the quest.
+(`*** RANGE ERR`), followed by a menu where you can continue the quest.
+
+### Deliberate changes from the original
+
+These are conveniences, not fixes. The game logic underneath is unchanged.
+
+| Original | Port |
+|---|---|
+| Quitting ended at the Integer BASIC `>` prompt with "TYPE 'GOTO 32000' TO REENTER GAME." | Quitting closes the window. A saved game is continued with **P** at the title. |
+| Losing the party ended at the `>` prompt. In the catacombs the message didn't wait for a key. | Every death message waits for a key, then the window closes. |
+| A ship lost off the edge of the world said "TO RECOVER YOUR SHIP, TYPE 'GOTO 31000'". Winning, and run-time errors, also ended at the `>` prompt. | A menu offers to recover the ship (or continue after an error), start a new quest, or leave. |
+| Saving asked you to swap disks, and in the catacombs to type a file name. | Saving writes `odyssey-old-game.json` after a key press. |
+| The hi-res pictures were 280×192 pixels. | Repainted pictures by default; `--classic` or **F2** shows the original. |
