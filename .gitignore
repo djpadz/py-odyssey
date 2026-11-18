@@ -1,0 +1,16 @@
+# Python / uv
+.venv/
+__pycache__/
+*.egg-info/
+dist/
+.coverage
+
+# Raw files pulled off the disk image (regenerate with: python3 tools/dos33.py Odyssey_TheCompleatAdv.dsk extracted/game)
+extracted/
+
+# Saved games
+odyssey-old-game.json
+*.sav
+
+# macOS
+.DS_Store
