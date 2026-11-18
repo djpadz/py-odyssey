@@ -5,7 +5,7 @@ __pycache__/
 dist/
 .coverage
 
-# Raw files pulled off the disk image (regenerate with: python3 tools/dos33.py Odyssey_TheCompleatAdv.dsk extracted/game)
+# Raw files pulled off the disk image (regenerate with: python3 tools/dos33.py src_listings/Odyssey_TheCompleatAdv.dsk extracted/game)
 extracted/
 
 # Saved games

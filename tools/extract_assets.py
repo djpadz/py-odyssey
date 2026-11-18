@@ -1,6 +1,6 @@
 """Extract binary assets and data tables from the original disk image into odyssey/.
 
-Usage: python3 tools/extract_assets.py Odyssey_TheCompleatAdv.dsk
+Usage: python3 tools/extract_assets.py src_listings/Odyssey_TheCompleatAdv.dsk
 """
 import os, sys, pprint
 sys.path.insert(0, os.path.dirname(__file__))

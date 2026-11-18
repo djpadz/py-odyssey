@@ -1,8 +1,8 @@
 # Odyssey: The Compleat Apventure — Python port
 
 A port of Robert Clardy's *Odyssey: The Compleat Apventure* (Synergistic
-Software, 1980) for the Apple II, reverse-engineered from the disk image in
-this directory (`Odyssey_TheCompleatAdv.dsk`).
+Software, 1980) for the Apple II, reverse-engineered from the original disk image
+(`src_listings/Odyssey_TheCompleatAdv.dsk`).
 
 The game logic is a hand translation of the original Integer BASIC programs
 into Python. The parts of the Apple II the game depends on are re-implemented:
@@ -87,15 +87,15 @@ flash quickly through random colours, exactly as the original did.
 | `odyssey/data.py`, `odyssey/assets/` | Tables, maps, pictures and shapes extracted from the disk. |
 | `odyssey/assets/art/` | The repainted pictures for the enhanced graphics. |
 | `tools/` | The reverse-engineering tools: DOS 3.3 reader, Integer BASIC detokenizer, variable-table parser, asset extractor, string checker. |
-| `src_listings/` | The detokenized original programs (control characters shown as `{^M}`, `{^G}`). |
+| `src_listings/` | The original disk images, and the detokenized programs from them (control characters shown as `{^M}`, `{^G}`). |
 | `tests/` | Scenario tests (`uv run python -m unittest discover tests`). |
 
 `odyssey/data.py` and `odyssey/assets/` are generated with
-`python3 tools/extract_assets.py Odyssey_TheCompleatAdv.dsk`. The repainted pictures in
+`python3 tools/extract_assets.py src_listings/Odyssey_TheCompleatAdv.dsk`. The repainted pictures in
 `odyssey/assets/art/` are made by
 `uv run --with pillow --with numpy --with scipy python tools/render_art.py`, using the
 OFL-licensed fonts in `tools/fonts/` (UnifrakturCook and IM Fell English). For the listings,
-first unpack the disk with `python3 tools/dos33.py Odyssey_TheCompleatAdv.dsk extracted/game`,
+first unpack the disk with `python3 tools/dos33.py src_listings/Odyssey_TheCompleatAdv.dsk extracted/game`,
 then run `python3 tools/intbasic.py extracted/game/<FILE>.I`.
 
 ## What is on the disk
@@ -111,8 +111,6 @@ then run `python3 tools/intbasic.py extracted/game/<FILE>.I`.
 | SOUND | binary, $0342 | Speaker tone routine (pitch $340, length $341, repeats $35C) |
 | COL | binary, $2400 | Lo-res colour-swap routine used for the poison-gas hallucinations |
 | INTBASIC | binary | Integer BASIC for the language card |
-
-`save.dsk` is identical to the game disk.
 
 ## Reverse-engineering notes
 
