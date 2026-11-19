@@ -57,6 +57,7 @@ struct MarketView: View {
             .padding(24)
             .buttonStyle(.bordered)
             .tint(.ink)
+            .environment(\.colorScheme, .light)        // parchment is always light
         }
     }
 
@@ -107,7 +108,7 @@ struct MarketView: View {
                 oldVoice(words, size: 20)
                 HStack {
                     TextField("Your offer", value: $amount, format: .number)
-                        .textFieldStyle(.roundedBorder)
+                        .textFieldStyle(.parchment)
                         .frame(width: 120)
                         .focused($amountFocused)
                         #if os(iOS)
@@ -127,7 +128,7 @@ struct MarketView: View {
                     oldVoice("AT \(price) QUADROONS PER \(lot.item.name), HOW MANY WOULD YOU LIKE?", size: 20)
                     HStack {
                         TextField("How many", value: $amount, format: .number)
-                            .textFieldStyle(.roundedBorder)
+                            .textFieldStyle(.parchment)
                             .frame(width: 80)
                             .focused($amountFocused)
                             #if os(iOS)
@@ -247,4 +248,22 @@ struct InventoryView: View {
         }
         .font(.fell(17))
     }
+}
+
+/// A number field inked on paler parchment, legible whatever the system appearance.
+struct ParchmentFieldStyle: TextFieldStyle {
+    func _body(configuration: TextField<Self._Label>) -> some View {
+        configuration
+            .textFieldStyle(.plain)
+            .font(.fell(18))
+            .foregroundStyle(Color.ink)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .background(Color.white.opacity(0.75), in: RoundedRectangle(cornerRadius: 5))
+            .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(Color.ink.opacity(0.45), lineWidth: 1))
+    }
+}
+
+extension TextFieldStyle where Self == ParchmentFieldStyle {
+    static var parchment: ParchmentFieldStyle { ParchmentFieldStyle() }
 }

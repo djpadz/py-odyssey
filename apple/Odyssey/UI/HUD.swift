@@ -114,6 +114,7 @@ struct Scroll<Content: View>: View {
             .background(Color.parchment.opacity(0.92), in: RoundedRectangle(cornerRadius: 6))
             .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color.ink.opacity(0.35), lineWidth: 1))
             .shadow(color: .black.opacity(0.3), radius: 6, y: 3)
+            .environment(\.colorScheme, .light)
     }
 }
 
