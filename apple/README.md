@@ -154,8 +154,12 @@ Map pixels (the original's 280×160 island coordinates) are the rules' unit of p
   reef; the original tests the whole picture of the ship, sails and all. Land is the chart
   picture's, within about 20 pixels, for landing too; the original looks up its coarse chart
   cells, off by a row or two.
-- The fishermen take what they're offered when they accept it, and pull the ship back to where it
-  last floated; the original lets them work for the offer alone, and leaves the ship on the shoal.
+- The fishermen take what they're offered when they accept it, and tow the ship back along its
+  wake, clear of the shoal; the original lets them work for the offer alone, and leaves the ship on
+  the shoal, where a current setting onto it can hold it there for good.
+- With the sails in shreds and no spare, merchantmen selling sails happen by even while the ship
+  lies at anchor; the original sends them only to a ship under way, which may mean drifting back
+  onto a shoal.
 - Mending the sails ends the rotten-sails trouble (the original leaves it standing, and nothing
   more ever happens at sea). The man killed by a raft chest's splinter is counted.
 - Argorion never says the orb lies on land, and the anchor reaches it wherever it lies (the

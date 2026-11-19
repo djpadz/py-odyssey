@@ -199,6 +199,9 @@ final class GameModel {
         case "CATACOMBS": e.rehearseBelow()
         case "ALTAR": e.rehearseBelow(altar: true)
         case "LAPOUR": e.rehearseLapour()
+        case "EMBARK": e.rehearseEmbarking()
+        case "EXIT": e.rehearseExit()
+        case "NEARLAPOUR": e.rehearseOffLapour()
         case "END":
             e.party.men = 40
             e.rehearseLapour(orb: true)
@@ -631,9 +634,19 @@ final class GameModel {
                              ground: (SIMD2<Float>) -> Float) {
         let eased = cameraFocus.map { simd_mix($0, focus, SIMD3(repeating: min(1, dt * 3))) } ?? focus
         cameraFocus = eased
-        let pitch = pitch ?? cameraPitch
-        let offset = SIMD3<Float>(sin(cameraYaw) * cos(pitch), sin(pitch), cos(cameraYaw) * cos(pitch))
-        var eye = eased + offset * distance
+        // Tilt up until no hill stands between the camera and what it looks at.
+        var pitch = pitch ?? cameraPitch
+        var eye = eased
+        for _ in 0..<12 {
+            let offset = SIMD3<Float>(sin(cameraYaw) * cos(pitch), sin(pitch), cos(cameraYaw) * cos(pitch))
+            eye = eased + offset * distance
+            let blocked = (1...8).contains { i in
+                let p = simd_mix(eased, eye, SIMD3(repeating: Float(i) / 9))
+                return ground([p.x, p.z]) > p.y - 1
+            }
+            if !blocked || pitch >= 1.4 { break }
+            pitch = min(pitch + 0.08, 1.4)
+        }
         eye.y = max(eye.y, ground([eye.x, eye.z]) + 3)
         camera?.look(at: eased, from: eye, relativeTo: nil)
     }

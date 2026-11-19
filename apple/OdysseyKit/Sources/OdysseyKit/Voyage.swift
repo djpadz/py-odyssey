@@ -154,7 +154,8 @@ public struct Voyage: Sendable, Codable {
     public internal(set) var flashes = 0
     /// Deserted islands landed on (Z21): after three, the temple.
     var landings = 0
-    /// Where the ship last floated free, to go back to when pulled off the shallows.
+    /// The ship's wake: where it last floated free, newest last (x, y pairs), for the
+    /// fishermen to tow it back along.
     var afloat: [Int] = [205, 117]
     /// Seconds in the whirlpool (the original counts its polling loop to 300).
     var whirled = 0.0
@@ -228,6 +229,12 @@ extension Expedition {
             while v.ticks >= 1 {
                 v.ticks -= 1
                 if rng.rnd(10) == 0 { windShift(&v) }
+                // With the sails in shreds and no spare, merchantmen happen by now and
+                // then even at anchor. (The original sends them only to a ship under
+                // way, which may be drifting onto a shoal it can't get off.)
+                if v.sailsTorn && !hasSpareSail && roadEvents && v.question == nil && rng.rnd(450) == 0 {
+                    v.question = .merchants
+                }
             }
             return
         }
@@ -266,7 +273,9 @@ extension Expedition {
             overTheEdge(&v)
             return
         }
-        if !Expedition.aground(x: v.x, y: v.y) { v.afloat = [v.x, v.y] }
+        if !Expedition.aground(x: v.x, y: v.y) {
+            v.afloat = Array((v.afloat + [v.x, v.y]).suffix(12))
+        }
         v.x = nx
         v.y = ny
         if Expedition.aground(x: nx, y: ny) {
@@ -831,8 +840,10 @@ extension Expedition {
             party.gold -= min(max(amount, 0), party.gold)
             v.said = ["THEY GOT YOU FREE. WHAT NOW CAPTAIN?"]
             v.happening = nil
+            // Towed back along the wake, well clear of the shoal.
             v.x = v.afloat[0]
             v.y = v.afloat[1]
+            v.afloat = [v.x, v.y]
         } else {
             v.said = ["YOU'VE GOT TO BE KIDDING. IT'S NOT EASY PULLING A SHIP OFF THE MUD FLATS. THE FISHERMEN ARE SAILING AWAY."]
         }

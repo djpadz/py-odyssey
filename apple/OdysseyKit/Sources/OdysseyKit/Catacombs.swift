@@ -399,10 +399,6 @@ extension Expedition {
     /// every other turn), and strikes when it reaches the party.
     private mutating func borerCloses(_ c: inout Catacombs) {
         guard var bx = c.borerX, var by = c.borerY else { return }
-        defer {
-            c.borerX = bx
-            c.borerY = by
-        }
         if bx == c.x && by == c.y {
             borerStrikes(&c)
             return
@@ -411,24 +407,28 @@ extension Expedition {
             let dx = (c.x - bx).signum()
             if c.isWall(bx + dx, by) {
                 c.boring.toggle()
-                if c.boring { return }
-                c.set(bx + dx, by, false)
-                bx += dx
-                return
+                if !c.boring {
+                    c.set(bx + dx, by, false)
+                    bx += dx
+                }
+            } else {
+                bx += dx * (abs(c.x - bx) > 1 ? 2 : 1)
             }
-            bx += dx * (abs(c.x - bx) > 1 ? 2 : 1)
         } else {
             let dy = (c.y - by).signum()
             if c.isWall(bx, by + dy) {
                 c.boring.toggle()
-                if c.boring { return }
-                c.set(bx, by + dy, false)
-                by += dy
-                return
+                if !c.boring {
+                    c.set(bx, by + dy, false)
+                    by += dy
+                }
+            } else {
+                by += dy * (abs(c.y - by) > 1 ? 2 : 1)
             }
-            by += dy * (abs(c.y - by) > 1 ? 2 : 1)
         }
         c.set(bx, by, false)
+        c.borerX = bx
+        c.borerY = by
         if abs(c.x - bx) + abs(c.y - by) < 2 {
             borerStrikes(&c)
         }

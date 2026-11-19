@@ -292,6 +292,45 @@ extension Expedition {
         }
     }
 
+    /// For looking at things: at the ship city with a ship and a crew, asked whether to sail.
+    public mutating func rehearseEmbarking() {
+        teleport(to: Island.shipCity)
+        party.men = 20
+        party.inventory[.ship] = 1
+        party.inventory[Item(47)] = 1
+        visit = nil
+        use(.ship)
+    }
+
+    /// For looking at things: below ground with the orb, at a way out.
+    public mutating func rehearseExit() {
+        rehearseBelow()
+        hasOrb = true
+        catacombs?.exitHere = true
+        catacombs?.said = ["THERE APPEARS TO BE AN EXIT HERE. WHAT DO YOU WANT TO DO?"]
+    }
+
+    /// For looking at things: at sea off Lapour, with the orb.
+    public mutating func rehearseOffLapour() {
+        voyage = Voyage()
+        hasOrb = true
+        party.men = 30
+        outer: for y in stride(from: 54, to: 20, by: -1) {
+            for x in stride(from: 50, to: 20, by: -1) where !Expedition.aground(x: x, y: y) {
+                let near = stride(from: -20, through: 20, by: 2).contains { dy in
+                    stride(from: -20, through: 20, by: 2).contains { dx in
+                        dx * dx + dy * dy <= 400 && SeaChart.ground(x: x + dx, y: y + dy) == .land
+                    }
+                }
+                if near {
+                    voyage?.x = x
+                    voyage?.y = y
+                    break outer
+                }
+            }
+        }
+    }
+
     public mutating func rehearseLapour(orb: Bool = false) {
         hasOrb = orb
         voyage = Voyage()

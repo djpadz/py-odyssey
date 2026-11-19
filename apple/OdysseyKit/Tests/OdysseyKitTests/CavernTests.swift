@@ -68,6 +68,20 @@ struct CavernTests {
         #expect(e.catacombs?.said.first?.hasPrefix("THE BORERS WERE BANISHED") == true)
     }
 
+    @Test func theBorerStrikesOnce() {
+        var e = below()
+        e.order(.light)
+        let c = e.catacombs!
+        e.catacombs!.borerX = c.x
+        e.catacombs!.borerY = c.y
+        let men = e.party.men
+        e.creep(0)
+        e.creep(2)
+        e.creep(0)
+        #expect(e.catacombs?.borer == nil)
+        #expect(e.party.men == men - 2)
+    }
+
     @Test func theFrenziesFindTheParty() {
         var hits = 0
         for seed in 0..<20 as Range<UInt64> {
