@@ -21,27 +21,35 @@ struct HUD: View {
     private var field: some View {
         VStack(alignment: .leading) {
             HStack(alignment: .top) {
-                Scroll {
-                    if let site = model.siteHere {
-                        Text(site == .city ? "The City" : "The \(site.distantName.capitalized)")
-                            .font(.blackletter(24))
-                        oldVoice(site.entrance)
-                        if site == .city {
-                            Button("Go to the market") { model.enterMarket() }
-                                .font(.fell(17))
-                                .buttonStyle(.borderedProminent)
-                                .tint(.ink.opacity(0.85))
-                                .keyboardShortcut(.defaultAction)
-                            Text("Or walk on to leave.").font(.fell(14, italic: true)).opacity(0.7)
+                if let visit = model.visit {
+                    VisitView(model: model, visit: visit)
+                        .transition(.move(edge: .leading).combined(with: .opacity))
+                } else {
+                    Scroll {
+                        if let site = model.siteHere {
+                            Text(site == .city ? "The City" : "The \(site.distantName.capitalized)")
+                                .font(.blackletter(24))
+                            if site == .city {
+                                oldVoice(site.entrance)
+                                Button("Go to the market") { model.enterMarket() }
+                                    .font(.fell(17))
+                                    .buttonStyle(.borderedProminent)
+                                    .tint(.ink.opacity(0.85))
+                                    .keyboardShortcut(.defaultAction)
+                                Text("Or walk on to leave.").font(.fell(14, italic: true)).opacity(0.7)
+                            } else if model.siteSealed {
+                                oldVoice("THE ENTRANCE HAS BEEN SEALED.")
+                            } else {
+                                oldVoice(site.entrance)
+                                Text("Walk on, and come back better equipped.").font(.fell(14, italic: true)).opacity(0.7)
+                            }
                         } else {
-                            Text("Its secrets await a later chapter.").font(.fell(14, italic: true)).opacity(0.7)
+                            oldVoice(model.report)
                         }
-                    } else {
-                        oldVoice(model.report)
                     }
+                    .frame(maxWidth: 440, alignment: .leading)
+                    .animation(.easeInOut(duration: 0.25), value: model.report)
                 }
-                .frame(maxWidth: 440, alignment: .leading)
-                .animation(.easeInOut(duration: 0.25), value: model.report)
                 Spacer()
                 Compass(yaw: model.cameraYaw)
             }

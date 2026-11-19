@@ -20,6 +20,8 @@ final class GameModel {
     private(set) var toast: String?
     var showingInventory = false
     var inMarket: Bool { expedition?.market != nil }
+    var visit: Visit? { expedition?.visit }
+    var siteSealed: Bool { expedition.map { $0.island.isSealed($0.cell) } ?? false }
 
     @ObservationIgnored private(set) var world: World?
     @ObservationIgnored var camera: PerspectiveCamera?
@@ -95,6 +97,28 @@ final class GameModel {
         return expedition?.buy(lot: lot, quantity: quantity, at: price)
     }
 
+    // MARK: Sites
+
+    func act(_ action: Action) {
+        guard var e = expedition else { return }
+        held.removeAll()
+        e.act(action)
+        expedition = e
+        hear(e.takeNews(), lost: e.isLost)
+        lastCell = nil
+    }
+
+    /// Pass news on as a toast, or end the quest.
+    private func hear(_ news: [String], lost: Bool) {
+        guard let last = news.last else { return }
+        if lost {
+            phase = .lost(last)
+        } else {
+            toast = news.joined(separator: " ")
+            toastUntil = clock + 5
+        }
+    }
+
     // MARK: The camera
 
     func orbit(by delta: CGSize) {
@@ -132,14 +156,10 @@ final class GameModel {
             heading += remainder(target - heading, 2 * .pi) * min(1, dt * 10)
             let news = e.takeNews()
             expedition = e
-            if let last = news.last {
-                if e.isLost {
-                    phase = .lost(last)
-                    return
-                }
-                toast = news.joined(separator: " ")
-                toastUntil = clock + 5
+            if !news.isEmpty {
+                hear(news, lost: e.isLost)
                 lastCell = nil
+                if e.isLost { return }
             }
         }
         if toast != nil && clock > toastUntil { toast = nil }

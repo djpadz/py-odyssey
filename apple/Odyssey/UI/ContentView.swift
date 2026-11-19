@@ -74,7 +74,7 @@ struct IslandView: View {
         .onAppear { focused = true }
         .onChange(of: model.inMarket) { focused = !model.inMarket }
         .onKeyPress(phases: [.down, .up]) { press in
-            guard !model.inMarket else { return .ignored }
+            guard !model.inMarket, !(model.visit?.isInside ?? false) else { return .ignored }
             let down = press.phase == .down
             if let move = Self.move(for: press) {
                 if down { model.held.insert(move) } else { model.held.remove(move) }
@@ -82,7 +82,7 @@ struct IslandView: View {
             }
             guard down else { return .ignored }
             switch press.characters.lowercased() {
-            case "l": model.look()
+            case "l" where model.visit == nil: model.look()
             case "m": model.enterMarket()
             case "i": model.showingInventory.toggle()
             case "=", "+": model.zoom(by: 1.15)
