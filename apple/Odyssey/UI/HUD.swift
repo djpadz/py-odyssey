@@ -6,16 +6,38 @@ struct HUD: View {
     let model: GameModel
 
     var body: some View {
+        ZStack {
+            if model.inMarket {
+                MarketView(model: model)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            } else {
+                field
+                    .transition(.opacity)
+            }
+        }
+        .animation(.easeInOut(duration: 0.4), value: model.inMarket)
+    }
+
+    private var field: some View {
         VStack(alignment: .leading) {
             HStack(alignment: .top) {
                 Scroll {
                     if let site = model.siteHere {
-                        Text(site.distantName == "VILLAGE" ? "The City" : "The \(site.distantName.capitalized)")
+                        Text(site == .city ? "The City" : "The \(site.distantName.capitalized)")
                             .font(.blackletter(24))
-                        Text(site.entrance.lowercased()).font(.fell(17).smallCaps())
-                        Text("Its secrets await a later chapter.").font(.fell(14, italic: true)).opacity(0.7)
+                        oldVoice(site.entrance)
+                        if site == .city {
+                            Button("Go to the market") { model.enterMarket() }
+                                .font(.fell(17))
+                                .buttonStyle(.borderedProminent)
+                                .tint(.ink.opacity(0.85))
+                                .keyboardShortcut(.defaultAction)
+                            Text("Or walk on to leave.").font(.fell(14, italic: true)).opacity(0.7)
+                        } else {
+                            Text("Its secrets await a later chapter.").font(.fell(14, italic: true)).opacity(0.7)
+                        }
                     } else {
-                        Text(model.report.lowercased()).font(.fell(17).smallCaps())
+                        oldVoice(model.report)
                     }
                 }
                 .frame(maxWidth: 440, alignment: .leading)
@@ -23,17 +45,29 @@ struct HUD: View {
                 Spacer()
                 Compass(yaw: model.cameraYaw)
             }
+            if let toast = model.toast {
+                oldVoice(toast, size: 22)
+                    .foregroundStyle(Color.parchment)
+                    .shadow(color: .black, radius: 4)
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 30)
+                    .transition(.opacity)
+            }
             Spacer()
             HStack(alignment: .bottom) {
                 #if os(iOS)
                 Joystick { model.stick = $0 }
                 #else
-                Text("WASD or arrows to walk · L to look · drag to turn · pinch or ± to zoom")
+                Text("WASD or arrows to walk · L to look · I for inventory · drag to turn · pinch or ± to zoom")
                     .font(.fell(13, italic: true))
                     .foregroundStyle(.white.opacity(0.85))
                     .shadow(radius: 2)
                 #endif
                 Spacer()
+                if model.showingInventory {
+                    InventoryView(model: model)
+                        .transition(.move(edge: .trailing).combined(with: .opacity))
+                }
                 VStack(alignment: .trailing, spacing: 10) {
                     #if os(iOS)
                     Button("Look") { model.look() }
@@ -50,10 +84,13 @@ struct HUD: View {
                             }
                             .font(.fell(16))
                         }
+                        .onTapGesture { model.showingInventory.toggle() }
                     }
                 }
             }
+            .animation(.easeInOut(duration: 0.25), value: model.showingInventory)
         }
+        .animation(.easeInOut(duration: 0.4), value: model.toast)
         .padding(20)
     }
 

@@ -81,6 +81,14 @@ public struct Expedition: Sendable {
         return nil
     }
 
+    /// The report from where the party stands (609-660), opening with the larder
+    /// instead of the terrain when food is short.
+    public func describe(looking: Bool = false) -> String {
+        let text = island.describe(x: x, y: y, looking: looking)
+        guard let warning = foodWarning else { return text }
+        return warning + text.dropFirst("YOU ARE IN THE \(terrain.name)".count)
+    }
+
     mutating func teleport(to cell: Cell) {
         (x, y) = cell.center
     }

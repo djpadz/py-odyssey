@@ -6,7 +6,7 @@ import SwiftUI
 /// The running game: the quest, the 3D world, and the player's input.
 @Observable @MainActor
 final class GameModel {
-    enum Phase { case title, loading, playing }
+    enum Phase: Equatable { case title, loading, playing, lost(String) }
 
     private(set) var phase = Phase.title
     private(set) var expedition: Expedition?
@@ -16,6 +16,10 @@ final class GameModel {
     private(set) var loadError: String?
     /// Camera yaw in radians; 0 looks north.
     private(set) var cameraYaw: Float = 0
+    /// A passing message, such as a man starving.
+    private(set) var toast: String?
+    var showingInventory = false
+    var inMarket: Bool { expedition?.market != nil }
 
     @ObservationIgnored private(set) var world: World?
     @ObservationIgnored var camera: PerspectiveCamera?
@@ -31,6 +35,7 @@ final class GameModel {
     @ObservationIgnored private var heading: Float = 0
     @ObservationIgnored private var lastCell: Cell?
     @ObservationIgnored private var lookingUntil: Double = 0
+    @ObservationIgnored private var toastUntil: Double = 0
     @ObservationIgnored private var clock: Double = 0
 
     func newQuest(seed: UInt64 = .random(in: 1...UInt64(UInt32.max))) {
@@ -43,6 +48,8 @@ final class GameModel {
                 world = try await WorldBuilder.build(expedition)
                 lastCell = nil
                 cameraFocus = nil
+                toast = nil
+                showingInventory = false
                 phase = .playing
             } catch {
                 loadError = error.localizedDescription
@@ -51,12 +58,44 @@ final class GameModel {
         }
     }
 
+    func backToTitle() {
+        phase = .title
+        expedition = nil
+        world = nil
+    }
+
     /// The L command: also name the terrain round about.
     func look() {
-        guard let e = expedition else { return }
-        report = e.island.describe(x: e.x, y: e.y, looking: true)
+        guard let e = expedition, !inMarket else { return }
+        report = e.describe(looking: true)
         lookingUntil = clock + 8
     }
+
+    // MARK: The market
+
+    func enterMarket() {
+        guard siteHere == .city else { return }
+        held.removeAll()
+        stick = .zero
+        showingInventory = false
+        expedition?.enterMarket()
+    }
+
+    func leaveMarket() {
+        expedition?.leaveMarket()
+        lastCell = nil                     // say where we are again
+    }
+
+    func offer(_ amount: Int, in haggle: inout Haggle) -> Reply? {
+        expedition?.offer(amount, in: &haggle)
+    }
+
+    func buy(lot: Int, quantity: Int, at price: Int) -> Purchase? {
+        defer { lastCell = nil }           // the larder may have changed
+        return expedition?.buy(lot: lot, quantity: quantity, at: price)
+    }
+
+    // MARK: The camera
 
     func orbit(by delta: CGSize) {
         cameraYaw -= Float(delta.width) * 0.008
@@ -66,6 +105,8 @@ final class GameModel {
     func zoom(by factor: Float) {
         cameraDistance = min(max(cameraDistance / factor, 12), 120)
     }
+
+    // MARK: The frame
 
     /// One frame of the world.
     func tick(dt: Float) {
@@ -85,20 +126,31 @@ final class GameModel {
         let dir = forward * input.y + right * input.x
 
         var moved = false
-        if simd_length(dir) > 0.05 {
+        if simd_length(dir) > 0.05 && !inMarket {
             moved = e.walk(dx: Double(dir.x), dy: Double(dir.y), dt: Double(dt) * Double(simd_length(input)))
             let target = atan2(-dir.x, -dir.y)
             heading += remainder(target - heading, 2 * .pi) * min(1, dt * 10)
+            let news = e.takeNews()
             expedition = e
+            if let last = news.last {
+                if e.isLost {
+                    phase = .lost(last)
+                    return
+                }
+                toast = news.joined(separator: " ")
+                toastUntil = clock + 5
+                lastCell = nil
+            }
         }
+        if toast != nil && clock > toastUntil { toast = nil }
 
         if e.cell != lastCell {
             lastCell = e.cell
             siteHere = e.site
-            report = e.island.describe(x: e.x, y: e.y)
+            report = e.describe()
         } else if lookingUntil > 0 && clock > lookingUntil {
             lookingUntil = 0
-            report = e.island.describe(x: e.x, y: e.y)
+            report = e.describe()
         }
 
         let p2 = WorldScale.world(x: e.x, y: e.y)
@@ -108,12 +160,20 @@ final class GameModel {
             max(ground.height(world: $0), 0.1)
         }
 
-        // The camera trails the party, easing after it.
-        let focus = position + [0, 1.5, 0]
-        let eased = cameraFocus.map { simd_mix($0, focus, SIMD3(repeating: min(1, dt * 5))) } ?? focus
+        // The camera trails the party, easing after it; in the bazaar it circles the city.
+        var focus = position + [0, 1.5, 0]
+        var distance = cameraDistance
+        if inMarket {
+            let c = e.cell.center
+            let p = WorldScale.world(x: c.x, y: c.y)
+            focus = [p.x, ground.height(world: p) + 3, p.y]
+            distance = 26
+            cameraYaw += dt * 0.12
+        }
+        let eased = cameraFocus.map { simd_mix($0, focus, SIMD3(repeating: min(1, dt * 3))) } ?? focus
         cameraFocus = eased
         let offset = SIMD3<Float>(sin(cameraYaw) * cos(cameraPitch), sin(cameraPitch), cos(cameraYaw) * cos(cameraPitch))
-        var eye = eased + offset * cameraDistance
+        var eye = eased + offset * distance
         eye.y = max(eye.y, ground.height(world: [eye.x, eye.z]) + 3)
         camera?.look(at: eased, from: eye, relativeTo: nil)
     }

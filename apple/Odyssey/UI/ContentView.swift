@@ -7,11 +7,14 @@ struct ContentView: View {
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
-            if model.phase == .playing {
+            switch model.phase {
+            case .playing:
                 IslandView(model: model)
                     .ignoresSafeArea()
                 HUD(model: model)
-            } else {
+            case let .lost(words):
+                LostView(words: words) { model.backToTitle() }
+            case .title, .loading:
                 TitleView(model: model)
             }
         }
@@ -69,7 +72,9 @@ struct IslandView: View {
         .focusEffectDisabled()
         .focused($focused)
         .onAppear { focused = true }
+        .onChange(of: model.inMarket) { focused = !model.inMarket }
         .onKeyPress(phases: [.down, .up]) { press in
+            guard !model.inMarket else { return .ignored }
             let down = press.phase == .down
             if let move = Self.move(for: press) {
                 if down { model.held.insert(move) } else { model.held.remove(move) }
@@ -78,6 +83,8 @@ struct IslandView: View {
             guard down else { return .ignored }
             switch press.characters.lowercased() {
             case "l": model.look()
+            case "m": model.enterMarket()
+            case "i": model.showingInventory.toggle()
             case "=", "+": model.zoom(by: 1.15)
             case "-": model.zoom(by: 1 / 1.15)
             default: return .ignored
@@ -101,5 +108,27 @@ struct IslandView: View {
         case "d": return .right
         default: return nil
         }
+    }
+}
+
+/// The party is no more.
+struct LostView: View {
+    let words: String
+    let onDone: () -> Void
+
+    var body: some View {
+        VStack(spacing: 24) {
+            Text("Alas").font(.blackletter(72)).foregroundStyle(Color.parchment)
+            oldVoice(words, size: 22)
+                .foregroundStyle(Color.parchment)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 520)
+            Button("Back to the Harbour", action: onDone)
+                .font(.fell(20))
+                .buttonStyle(.borderedProminent)
+                .tint(Color(red: 0.55, green: 0.12, blue: 0.10))
+                .keyboardShortcut(.defaultAction)
+        }
+        .padding(30)
     }
 }
