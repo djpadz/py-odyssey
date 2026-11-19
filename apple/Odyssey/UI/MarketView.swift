@@ -30,7 +30,7 @@ struct MarketView: View {
     var body: some View {
         if let market, let party {
             VStack(spacing: 0) {
-                Text("Bazaar Sale Items").font(.blackletter(34)).padding(.top, 14)
+                Text(market.isCaravan ? "Caravan Sale Items" : "Bazaar Sale Items").font(.blackletter(34)).padding(.top, 14)
                 HStack(alignment: .top, spacing: 20) {
                     board(market)
                         .frame(minWidth: 330, maxWidth: 420)

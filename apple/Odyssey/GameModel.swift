@@ -104,6 +104,10 @@ final class GameModel {
         held.removeAll()
         e.act(action)
         expedition = e
+        if e.market != nil {               // buying from a caravan
+            stick = .zero
+            showingInventory = false
+        }
         hear(e.takeNews(), lost: e.isLost)
         lastCell = nil
     }

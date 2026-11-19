@@ -1,7 +1,8 @@
 import OdysseyKit
 import SwiftUI
 
-/// A visit to a temple, ruin, castle, tomb or hut: what happened, what now.
+/// A visit to a temple, ruin, castle, tomb or hut, or something met on the road:
+/// what happened, what now.
 struct VisitView: View {
     let model: GameModel
     let visit: Visit
@@ -17,8 +18,10 @@ struct VisitView: View {
             if case let .battle(b) = visit.stage {
                 Tally(battle: b)
             }
-            oldVoice(visit.question, size: 18)
-                .padding(.top, 4)
+            if !visit.question.isEmpty {
+                oldVoice(visit.question, size: 18)
+                    .padding(.top, 4)
+            }
             if choosingItem {
                 itemPicker
             } else {
@@ -32,9 +35,16 @@ struct VisitView: View {
 
     private var title: String {
         switch visit.stage {
-        case .battle, .monstersAhead, .offering: "Monsters!"
+        case let .battle(b):
+            if case .monsters = b.foe { "Monsters!" } else { "To Arms!" }
+        case .monstersAhead, .offering: "Monsters!"
         case .pit: "A Pit Trap"
-        default: "The \(visit.site.distantName.capitalized)"
+        case .caravan: "A Caravan"
+        case let .wizard(good): good ? "A Wizard" : "A Warlock"
+        case .warriors: "Warriors"
+        case .trapped: "Misfortune"
+        case .obstacle: "The Way Is Barred"
+        default: visit.site.map { "The \($0.distantName.capitalized)" } ?? "On the Road"
         }
     }
 
@@ -45,7 +55,8 @@ struct VisitView: View {
                     .keyboardShortcut("u", modifiers: [])
             }
             ForEach(visit.actions, id: \.self) { action in
-                let (label, key) = Self.label(action)
+                // On the road, leaving at the end is just walking on.
+                let (label, key) = visit.site == nil && visit.stage == .finished ? ("Go on", "g") : Self.label(action)
                 Button(label) { model.act(action) }
                     .keyboardShortcut(key, modifiers: [])
             }
@@ -94,6 +105,11 @@ struct VisitView: View {
         case .accept: ("Yes", "y")
         case .decline: ("No", "n")
         case .carryOn: ("Leave them", "c")
+        case .ignore: ("Ignore them", "i")
+        case .buy: ("Buy something", "b")
+        case .requestAid: ("Request aid", "r")
+        case .beFriendly: ("Be friendly", "f")
+        case .wait: ("Wait cautiously", "w")
         }
     }
 }
@@ -107,7 +123,7 @@ struct Tally: View {
             GridRow {
                 Text("You").font(.blackletter(18))
                 Text("")
-                Text(battle.monster.name.capitalized).font(.blackletter(18))
+                Text(battle.foe.name.capitalized).font(.blackletter(18))
             }
             row(battle.ourNumber, "original number", battle.theirNumber)
             row(battle.ourLosses, "casualties", battle.theirLosses)

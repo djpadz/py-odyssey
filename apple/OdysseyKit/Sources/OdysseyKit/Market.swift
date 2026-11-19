@@ -10,6 +10,8 @@ public struct Market: Sendable {
     }
 
     public private(set) var lots: [Lot]
+    /// A caravan met on the road rather than a city's bazaar.
+    public internal(set) var isCaravan = false
 
     /// Stock a market (1500-1515): food always, the ship at the ship city, then
     /// whatever else the caravans brought in.

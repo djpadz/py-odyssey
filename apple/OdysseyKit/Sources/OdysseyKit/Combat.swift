@@ -20,9 +20,31 @@ public struct Monster: Hashable, Sendable {
     public var flies: Bool { kind > 16 }
 }
 
+/// Who the party is fighting: monsters, or the people met on the road (MT=0).
+public enum Foe: Hashable, Sendable {
+    case monsters(Monster)
+    case merchants, wizards, warlocks, warriors
+
+    /// The original's A$ when the battle ends.
+    public var name: String {
+        switch self {
+        case let .monsters(m): m.name
+        case .merchants: "MERCHANTS"
+        case .wizards: "WIZARDS"
+        case .warlocks: "WARLOCKS"
+        case .warriors: "WARRIORS"
+        }
+    }
+
+    /// MT, which picks how their arms are described.
+    var kind: Int {
+        if case let .monsters(m) = self { m.kind } else { 0 }
+    }
+}
+
 /// A fight (lines 6000-6980). "We" are the party, "they" the monsters.
 public struct Battle: Sendable, Equatable {
-    public let monster: Monster
+    public let foe: Foe
     public let ourNumber: Int                // FM at the start
     public let theirNumber: Int              // MN
     public internal(set) var ourLosses = 0   // CK
@@ -38,15 +60,15 @@ public struct Battle: Sendable, Equatable {
     public internal(set) var lastRound: (ourLuck: Int, theirLuck: Int, ourTotal: Int, theirTotal: Int)?
 
     public static func == (a: Battle, b: Battle) -> Bool {
-        a.monster == b.monster && a.ourLosses == b.ourLosses && a.theirLosses == b.theirLosses
+        a.foe == b.foe && a.ourLosses == b.ourLosses && a.theirLosses == b.theirLosses
             && a.theirNumber == b.theirNumber && a.surprise == b.surprise
     }
 
     public var ourStanding: Int { ourNumber - ourLosses }
     public var theirStanding: Int { theirNumber - theirLosses }
 
-    init(monster: Monster, party: Party, theyWereSurprised: Bool, surprise: Int, rng: inout SeededRandom) {
-        self.monster = monster
+    init(foe: Foe, party: Party, theyWereSurprised: Bool, surprise: Int, rng: inout SeededRandom) {
+        self.foe = foe
         ourNumber = party.men
         theirNumber = party.men + rng.rnd(10) - 5
         theirArms = 2 + rng.rnd(4)
@@ -72,9 +94,9 @@ public struct Battle: Sendable, Equatable {
     /// Lines 6100-6160.
     public var sizeUp: String {
         var text = "THERE ARE \(theirNumber) OF THEM. THEY HAVE "
-        let s = theirStrength
-        if s == 3 && monster.kind <= 9 { text += "NO ARMOR OR WEAPONS TO SPEAK OF." }
-        if monster.kind > 9 {
+        let s = theirStrength, kind = foe.kind
+        if s == 3 && kind <= 9 { text += "NO ARMOR OR WEAPONS TO SPEAK OF." }
+        if kind > 9 {
             if s == 3 { text += "LIGHT ARMOR AND WEAPONS." }
             if s == 4 { text += "MODERATE ARMOR AND WEAPONS." }
             if s == 5 { text += "HEAVY SCALE ARMOR AND WEAPONS." }

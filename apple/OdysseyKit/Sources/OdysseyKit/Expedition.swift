@@ -65,6 +65,10 @@ public struct Expedition: Sendable {
     var hungryRations = 0
     /// Things that happened that the player should hear about, oldest first.
     public internal(set) var news: [String] = []
+    /// Whether anything can befall the party on the road (off for some tests).
+    var roadEvents = true
+    /// An obstacle the player turned away from, so bumping it again stays quiet.
+    var passedObstacle: Cell?
 
     public init(seed: UInt64) {
         self.seed = seed
@@ -118,38 +122,58 @@ public struct Expedition: Sendable {
     }
 
     /// Walk in direction (dx, dy) (map axes, roughly unit length) for dt seconds.
-    /// The men won't wade into the sea, so the party slides along the shore.
+    /// The men won't wade into the sea, so the party slides along the shore; walking
+    /// straight at an obstacle stops and says what is in the way.
     /// Returns true if the party moved.
     @discardableResult
     public mutating func walk(dx: Double, dy: Double, dt: Double) -> Bool {
-        guard !isLost, !(visit?.isInside ?? false), market == nil else { return false }
+        guard !isLost, visit?.holdsParty != true, market == nil else { return false }
         let before = cell
-        defer {
-            if cell != before {
-                visit = nil               // walked away from a door
-                arrive()
-            }
-        }
         let step = Expedition.pace(terrain) * dt
-        for (mx, my) in [(dx, dy), (dx, 0), (0, dy)] where mx != 0 || my != 0 {
+        var turnsWalked = 0, moved = false
+        for (i, (mx, my)) in [(dx, dy), (dx, 0), (0, dy)].enumerated() where mx != 0 || my != 0 {
             let nx = x + mx * step, ny = y + my * step
-            if island.terrain(Cell(x: nx, y: ny)) != .ocean {
-                walked += ((nx - x) * (nx - x) + (ny - y) * (ny - y)).squareRoot()
-                x = nx
-                y = ny
-                while walked >= Expedition.turnLength {
-                    walked -= Expedition.turnLength
-                    passTurn()
+            let next = Cell(x: nx, y: ny)
+            if island.terrain(next) == .ocean { continue }
+            if next != cell, let obstacle = island.obstacles[next] {
+                if i == 0 && visit == nil && next != passedObstacle {
+                    visit = Visit(cell: next, stage: .obstacle(obstacle))
+                    return false
                 }
-                return true
+                continue
             }
+            walked += ((nx - x) * (nx - x) + (ny - y) * (ny - y)).squareRoot()
+            x = nx
+            y = ny
+            while walked >= Expedition.turnLength {
+                walked -= Expedition.turnLength
+                turnsWalked += 1
+            }
+            moved = true
+            break
         }
-        return false
+        if cell != before {
+            visit = nil                   // walked away from a door
+            passedObstacle = nil
+            arrive()
+        }
+        for _ in 0..<turnsWalked {
+            passTurn(heading: (dx, dy))
+        }
+        return moved
+    }
+
+    /// A turn on the road: rations (602), then perhaps an event (726).
+    mutating func passTurn(heading: (dx: Double, dy: Double) = (0, 0)) {
+        eat()
+        if roadEvents && !isLost && visit == nil && market == nil {
+            roadEvent(heading: heading)
+        }
     }
 
     /// Line 602: every fifth turn the men eat a pack per ten of them (rounding up past
     /// five); three missed rations and a man starves each time after.
-    mutating func passTurn() {
+    private mutating func eat() {
         turns += 1
         guard turns % 5 == 0 else { return }
         let ration = party.men / 10 + (party.men % 10 > 5 ? 1 : 0)

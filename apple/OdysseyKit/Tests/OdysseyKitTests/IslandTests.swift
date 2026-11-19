@@ -56,6 +56,7 @@ struct IslandTests {
 
     @Test func menWillNotWadeIntoTheSea() {
         var e = Expedition(seed: 5)
+        e.roadEvents = false
         for _ in 0..<2000 { e.walk(dx: 0, dy: -1, dt: 0.05) }
         #expect(e.terrain != .ocean)
         #expect(e.y > 0)

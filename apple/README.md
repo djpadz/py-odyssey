@@ -42,6 +42,7 @@ The rules have their own tests: `cd apple/OdysseyKit && swift test`.
 | `OdysseyKit/.../Expedition.swift` | The party (rolled as in HAIL), walking, turns, rations and starvation. |
 | `OdysseyKit/.../Items.swift`, `Market.swift` | The 49 items, and the city bazaar with haggling (lines 1500–1598). |
 | `OdysseyKit/.../Visit.swift`, `Combat.swift` | Temples, ruins, castles, tombs and huts (9000–9915), monsters (1200–1370) and battles (6000–6980). |
+| `OdysseyKit/.../Road.swift` | What happens between sites (725–3400): encounters, traps and obstacles, played out as visits with no site. |
 | `Odyssey/World/` | The 3D island: heightfield terrain and texture, vegetation and site models, the party. |
 | `Odyssey/UI/` | Title, HUD, market, inventory and site panels. |
 | `Odyssey/GameModel.swift` | Ties the rules, the scene, the camera and input together. |
@@ -60,6 +61,10 @@ Map pixels (the original's 280×160 island coordinates) are the rules' unit of p
 - Rations every fifth turn (one turn = 3 map pixels walked), starvation, and losing the quest.
 - Sites: opening doors with the right tool, six searches, altars, chests, pit traps, monsters,
   combat with the original's tally, spoils, huts selling magic, and sealing on leaving.
+- The road: each turn's walk may bring monsters (flying ones too), a merchant caravan to buy
+  from or rob, a wizard or warlock, warriors who join as mercenaries or turn out to be bandits,
+  a trap that catches men until the right thing frees them, or an obstacle that bars the way
+  until the right thing clears it.
 
 ## Changes from the original
 
@@ -68,12 +73,14 @@ Map pixels (the original's 280×160 island coordinates) are the rules' unit of p
 - The men refuse purchases they cannot carry, instead of buying and then dumping.
 - Bargaining with monsters goes by the monster's kind (the original tests a stale variable).
 - At a door, Leave closes the panel rather than repeating the entrance text.
+- An obstacle bars the cell the party was walking into, and keeps its description. The original
+  backs the party off, bars the cell it was standing in, and describes it afresh each time.
+- A trap keeps its description while you try things (the original can re-roll the swamp's).
+- Men lost to a caravan's guards stay lost. The original skips the count when the caravan falls.
 
 ## Next
 
-1. Overland events while walking (lines 725–850, 3000–3400): random monsters, merchant
-   caravans, wizards, warriors, traps and obstacles cleared with the right item.
-2. Monsters, chests and sealed sites shown in 3D.
-3. Using magic items (8100+) and the other commands: drop, get, ride (the horse).
-4. Saving and resuming a quest.
-5. The ship and the sea voyage, the catacombs, and the Caliph's fortress.
+1. Monsters, chests, sealed sites and obstacles shown in 3D.
+2. Using magic items (8100+) and the other commands: drop, get, ride (the horse).
+3. Saving and resuming a quest (including the obstacles, which live outside the map array).
+4. The ship and the sea voyage, the catacombs, and the Caliph's fortress.

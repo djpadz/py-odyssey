@@ -1,4 +1,4 @@
-/// What the player can do at a site. Each matches one of the original's keys.
+/// What the player can do at a site or on the road. Each matches one of the original's keys.
 public enum Action: Hashable, Sendable {
     case use(Item)              // U: the right key or tool opens the way, or saves trapped men
     case enter                  // E: into a hut
@@ -14,10 +14,16 @@ public enum Action: Hashable, Sendable {
     case fight, run             // F or R, each round
     case accept, decline        // Y/N to the hut's offer
     case carryOn                // abandon the men in the pit
+    case ignore                 // I: pass the caravan or the warriors by
+    case buy                    // B: from the caravan
+    case requestAid             // R: of the wizard
+    case beFriendly             // to the warriors
+    case wait                   // W: ...or wait cautiously
 }
 
 /// A visit to a temple, ruin, castle, tomb or hut (lines 9000-9915), with the
-/// monsters, chests and pits found inside.
+/// monsters, chests and pits found inside; or something met on the road between
+/// them (725-3400), when `site` is nil.
 public struct Visit: Sendable {
     public enum Stage: Sendable, Equatable {
         case door                           // locked; find the right thing to use
@@ -30,11 +36,19 @@ public struct Visit: Sendable {
         case monstersAhead(Monster)
         case offering(Monster)
         case battle(Battle)
-        case spoils                         // the beaten monsters' chest
+        case spoils(Foe)                    // the beaten monsters' chest
         case finished                       // nothing more here: leave
+        // On the road (Road.swift).
+        case caravan
+        case wizard(good: Bool)             // a wizard, or a warlock
+        case warriors
+        case trapped(Trap, men: Int)
+        case obstacle(Obstacle)
     }
 
-    public let site: Site
+    /// Where this happens: a site, or nil on the road.
+    public let site: Site?
+    /// The site's cell, the party's cell on the road, or the cell an obstacle bars.
     public let cell: Cell
     public internal(set) var stage: Stage
     /// What has just happened, oldest first.
@@ -46,10 +60,18 @@ public struct Visit: Sendable {
 
     public var isInside: Bool { searchesLeft != nil }
 
+    /// Whether the party must see this through before walking on. At a door it may
+    /// walk away, and likewise from an obstacle.
+    public var holdsParty: Bool {
+        if site != nil { return isInside }
+        if case .obstacle = stage { return false }
+        return true
+    }
+
     /// Whether the player may use something they carry here.
     public var canUseItems: Bool {
         switch stage {
-        case .door, .pit: true
+        case .door, .pit, .trapped, .obstacle: true
         default: false
         }
     }
@@ -68,7 +90,12 @@ public struct Visit: Sendable {
         case .offering: "DO YOU WANT TO OFFER GOLD OR FOOD?"
         case .battle: "WILL YOU RUN OR FIGHT?"
         case .spoils: "IT LOOKS LIKE THEY HAVE A CHEST OF SOME SORT. WILL YOU OPEN IT OR LEAVE?"
-        case .finished: "IT LOOKS LIKE THERE IS NOTHING ELSE IN HERE. YOU'D BETTER LEAVE NOW."
+        case .finished: site == nil ? "" : "IT LOOKS LIKE THERE IS NOTHING ELSE IN HERE. YOU'D BETTER LEAVE NOW."
+        case .caravan: "YOU HAVE ENCOUNTERED A SMALL CARAVAN OF MERCHANTS. WILL YOU IGNORE THEM, ATTACK THEM, OR BUY SOMETHING FROM THEM?"
+        case let .wizard(good): "YOU'VE COME UPON A WANDERING \(good ? "WIZARD" : "WARLOCK"). HE IS ACCOMPANIED BY SEVERAL APPRENTICES. WILL YOU ATTACK, REQUEST AID, OR LEAVE."
+        case .warriors: "DO YOU WANT TO ATTACK, BE FRIENDLY, IGNORE THEM, OR WAIT CAUTIOUSLY?"
+        case let .trapped(trap, n): "\(n) \(trap.words). WHAT DO YOU WANT TO DO?"
+        case let .obstacle(obstacle): "\(obstacle.words) WHAT DO YOU WANT TO DO?"
         }
     }
 
@@ -86,6 +113,11 @@ public struct Visit: Sendable {
         case .offering: [.offerGold, .offerFood]
         case .battle: [.fight, .run]
         case .finished: [.leave]
+        case .caravan: [.ignore, .attack, .buy]
+        case .wizard: [.attack, .requestAid, .leave]
+        case .warriors: [.attack, .beFriendly, .ignore, .wait]
+        case .trapped: [.carryOn]
+        case .obstacle: [.leave]
         }
     }
 
@@ -102,12 +134,21 @@ public struct Visit: Sendable {
         case .hut, .city: []
         }
     }
+
+    /// Something met on the road.
+    init(cell: Cell, stage: Stage, said: [String] = []) {
+        site = nil
+        self.cell = cell
+        self.stage = stage
+        self.said = said
+        opens = []
+    }
 }
 
 extension Expedition {
     /// Step up to the site in this cell, if there is one still open.
     mutating func arrive() {
-        guard let site, site != .city, !island.isSealed(cell) else { return }
+        guard visit == nil, let site, site != .city, !island.isSealed(cell) else { return }
         visit = Visit(site: site, cell: cell)
     }
 
@@ -119,9 +160,12 @@ extension Expedition {
         perform(action, in: &v)
         if party.men <= 0 && v.stage != .finished { lose(&v) }
         visit = v
-        if v.stage == .finished && action == .leave {
+        // On the road, an ending with nothing to say needs no leave-taking.
+        if v.stage == .finished && (action == .leave || (v.site == nil && v.said.isEmpty)) {
             visit = nil
-            if v.isInside {
+            if v.site == nil {
+                arrive()                    // a site may wait behind the encounter
+            } else if v.isInside {
                 island.seal(v.cell)
                 news.append("THE ENTRANCE SEALED BEHIND YOU AS YOU LEFT.")
             }
@@ -218,13 +262,10 @@ extension Expedition {
             party.gold += gold
             v.stage = .finished
 
-        // The pit (9760-9762, 8000-8017): a rope, a horse or a net pulls men out.
+        // The pit (9760-9762, 8000-8017): a rope, a net or a spare sail pulls men out.
         case let (.pit(trapped), .use(item)):
             if [7, 19, 18].contains(item.id) {
-                let saved = min(rng.rnd(trapped) + 2, trapped)
-                party.men += saved
-                v.said = ["CONGRATULATIONS! YOU SAVED \(saved) MEN WITH YOUR \(item.name)."]
-                if trapped > saved { v.said.append("THE OTHER \(trapped - saved) DIED, HOWEVER.") }
+                rescue(trapped, with: item, in: &v)
                 searchOn(&v)
             } else {
                 v.said = ["USING YOUR \(item.name) DIDN'T HAVE ANY USEFUL EFFECT."]
@@ -234,18 +275,18 @@ extension Expedition {
 
         // Monsters (1200-1370).
         case let (.monstersAhead(m), .attack):
-            startBattle(m, theyWereSurprised: true, surprise: rng.rnd(3), in: &v)
+            startBattle(.monsters(m), theyWereSurprised: true, surprise: rng.rnd(3), in: &v)
         case let (.monstersAhead(m), .slipAway):
             if rng.rnd(4) != 0 {
                 searchOn(&v)
             } else {
                 v.said = ["YOU MADE SOME NOISE. THEY'RE ATTACKING!"]
-                startBattle(m, theyWereSurprised: false, surprise: 0, in: &v)
+                startBattle(.monsters(m), theyWereSurprised: false, surprise: 0, in: &v)
             }
         case let (.monstersAhead(m), .offerGold), let (.offering(m), .offerGold):
             if !m.reasons {
                 v.said = ["THEY ARE TOO STUPID TO BE INTERESTED IN TREASURE. THEY ARE ATTACKING."]
-                startBattle(m, theyWereSurprised: false, surprise: 1, in: &v)
+                startBattle(.monsters(m), theyWereSurprised: false, surprise: 1, in: &v)
             } else if party.alignment < 0 {
                 let joined = party.charisma / 2 + rng.rnd(3)
                 party.men += joined
@@ -255,12 +296,12 @@ extension Expedition {
             } else {
                 party.gold = max(party.gold - 50, 0)
                 v.said = ["THEY TOOK THE GOLD AND ARE ATTACKING ANYWAY!"]
-                startBattle(m, theyWereSurprised: false, surprise: 1, in: &v)
+                startBattle(.monsters(m), theyWereSurprised: false, surprise: 1, in: &v)
             }
         case let (.monstersAhead(m), .offerFood), let (.offering(m), .offerFood):
             if m.reasons {
                 v.said = ["THEY WERE ENRAGED BY YOUR INSULTING OFFER AND ARE ATTACKING!"]
-                startBattle(m, theyWereSurprised: false, surprise: 1, in: &v)
+                startBattle(.monsters(m), theyWereSurprised: false, surprise: 1, in: &v)
             } else {
                 party.foodPacks = max(party.foodPacks - 5, 0)
                 v.said = ["THEY ATE THE FOOD AND WANDERED OFF."]
@@ -282,23 +323,32 @@ extension Expedition {
                 settle(b, in: &v)
                 v.said.insert(contentsOf: words, at: 0)
             }
-        case (.spoils, .open):
-            openSpoils(&v)
+        case let (.spoils(foe), .open):
+            openSpoils(of: foe, in: &v)
         case (.spoils, .goOn):
             searchOn(&v)
 
         case (.finished, .leave):
             break
         default:
-            break
+            onTheRoad(action, in: &v)
         }
     }
 
-    /// 9710: another search, unless the searches are used up.
-    private mutating func searchOn(_ v: inout Visit) {
+    /// 9710: another search, unless the searches are used up. (On the road there are
+    /// none, so this ends the encounter.)
+    mutating func searchOn(_ v: inout Visit) {
         let left = (v.searchesLeft ?? 0) - 1
         v.searchesLeft = left
         v.stage = left < 0 ? .finished : .searching
+    }
+
+    /// 8000-8017: some of the trapped men are saved with the right thing.
+    mutating func rescue(_ trapped: Int, with item: Item, in v: inout Visit) {
+        let saved = min(rng.rnd(trapped) + 2, trapped)
+        party.men += saved
+        v.said = ["CONGRATULATIONS! YOU SAVED \(saved) MEN WITH YOUR \(item.name)."]
+        if trapped > saved { v.said.append("THE OTHER \(trapped - saved) DIED, HOWEVER.") }
     }
 
     private mutating func pitTrap(_ v: inout Visit) {
@@ -309,18 +359,22 @@ extension Expedition {
         if isLost { lose(&v) }
     }
 
-    private mutating func meetMonsters(_ v: inout Visit) {
-        let m = Monster(kind: 1 + rng.rnd(16))
+    /// 1200-1210. Only on the road (Z3=0) do the four flying kinds come.
+    mutating func meetMonsters(_ v: inout Visit) {
+        let m = Monster(kind: 1 + rng.rnd(v.site == nil ? 20 : 16))
+        if m.flies {
+            v.said.append("TAKE COVER! A BUNCH OF \(m.name) ARE FLYING THIS WAY!")
+        }
         if rng.rnd(2) == 0 {
-            v.said = ["YOU'VE BEEN ATTACKED BY \(m.name)!"]
-            startBattle(m, theyWereSurprised: false, surprise: rng.rnd(3), in: &v)
+            v.said.append("YOU'VE BEEN ATTACKED BY \(m.name)!")
+            startBattle(.monsters(m), theyWereSurprised: false, surprise: rng.rnd(3), in: &v)
         } else {
             v.stage = .monstersAhead(m)
         }
     }
 
-    private mutating func startBattle(_ m: Monster, theyWereSurprised: Bool, surprise: Int, in v: inout Visit) {
-        let b = Battle(monster: m, party: party, theyWereSurprised: theyWereSurprised, surprise: surprise, rng: &rng)
+    mutating func startBattle(_ foe: Foe, theyWereSurprised: Bool, surprise: Int, in v: inout Visit) {
+        let b = Battle(foe: foe, party: party, theyWereSurprised: theyWereSurprised, surprise: surprise, rng: &rng)
         v.said.append(b.sizeUp)
         settle(b, in: &v)
     }
@@ -333,15 +387,24 @@ extension Expedition {
         } else if b.isWon {
             party.experience += 5
             party.men -= b.ourLosses
-            v.said.append("CONGRATULATIONS! YOU KILLED ALL OF THE \(b.monster.name).")
-            v.stage = .spoils
+            if b.foe == .merchants {
+                caravanSpoils(&v)
+                return
+            }
+            v.said.append("CONGRATULATIONS! YOU KILLED ALL OF THE \(b.foe.name).")
+            if v.site == nil && rng.rnd(2) == 0 {
+                v.said.append("IT LOOKS LIKE THEY HAD NO TREASURE.")
+                v.stage = .finished
+            } else {
+                v.stage = .spoils(b.foe)
+            }
         } else {
             v.stage = .battle(b)
         }
     }
 
-    /// 4000-4065: the monsters' chest.
-    private mutating func openSpoils(_ v: inout Visit) {
+    /// 4000-4065: the monsters' chest. A wizard's holds magic more often.
+    private mutating func openSpoils(of foe: Foe, in v: inout Visit) {
         if rng.rnd(5) == 0 {
             v.said.append("SOME POISONOUS SPORES WERE RELEASED FROM THE CHEST. YOUR PARTY WAS WEAKENED, BUT NO ONE WAS KILLED.")
             party.strength = max(party.strength - 1, 1)
@@ -351,7 +414,8 @@ extension Expedition {
                 return
             }
         }
-        if rng.rnd(5) != 0 || rng.rnd(2) == 1 || rng.rnd(4) != 0 {
+        let wizards = foe == .wizards || foe == .warlocks
+        if (rng.rnd(5) != 0 && !wizards) || rng.rnd(2) == 1 || rng.rnd(4) != 0 {
             let gold = 500 + rng.rnd(500)
             v.said.append("THERE ARE \(gold) QUADROONS OF GOLD IN THE CHEST!")
             party.gold += gold
@@ -370,13 +434,13 @@ extension Expedition {
         searchOn(&v)
     }
 
-    private mutating func lose(_ v: inout Visit) {
+    mutating func lose(_ v: inout Visit) {
         party.men = 0
         v.stage = .finished
         news.append(Expedition.allLost)
     }
 
-    private mutating func gain(_ item: Item) {
-        party.inventory[item, default: 0] += 1
+    mutating func gain(_ item: Item, _ quantity: Int = 1) {
+        party.inventory[item, default: 0] += quantity
     }
 }

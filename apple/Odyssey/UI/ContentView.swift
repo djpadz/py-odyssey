@@ -74,7 +74,7 @@ struct IslandView: View {
         .onAppear { focused = true }
         .onChange(of: model.inMarket) { focused = !model.inMarket }
         .onKeyPress(phases: [.down, .up]) { press in
-            guard !model.inMarket, !(model.visit?.isInside ?? false) else { return .ignored }
+            guard !model.inMarket, !(model.visit?.holdsParty ?? false) else { return .ignored }
             let down = press.phase == .down
             if let move = Self.move(for: press) {
                 if down { model.held.insert(move) } else { model.held.remove(move) }

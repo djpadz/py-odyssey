@@ -72,6 +72,8 @@ public struct Island: Sendable {
 
     private(set) var lc: [Int]
     public let start: (x: Double, y: Double)
+    /// Cells barred until the right thing clears the way (the original adds 99 to LC).
+    public private(set) var obstacles: [Cell: Obstacle] = [:]
 
     /// Lay out a new island: the fixed ship city, two more cities and three of
     /// every other site, then put the party beside the last city.
@@ -130,6 +132,14 @@ public struct Island: Sendable {
     mutating func seal(_ cell: Cell) {
         guard cell.isOnMap, !isSealed(cell) else { return }
         lc[cell.index] += 100
+    }
+
+    mutating func bar(_ cell: Cell, with obstacle: Obstacle) {
+        obstacles[cell] = obstacle
+    }
+
+    mutating func clear(_ cell: Cell) {
+        obstacles[cell] = nil
     }
 
     public var sites: [(cell: Cell, site: Site)] {

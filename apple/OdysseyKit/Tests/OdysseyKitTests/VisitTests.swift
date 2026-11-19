@@ -54,6 +54,7 @@ struct VisitTests {
 
     @Test func walkingAwayFromADoorForgetsIt() {
         var e = at(.ruin)
+        e.roadEvents = false
         for _ in 0..<40 where e.visit != nil {
             e.walk(dx: 1, dy: 0.3, dt: 0.5)
             e.walk(dx: -0.3, dy: 1, dt: 0.5)
@@ -105,7 +106,7 @@ struct VisitTests {
         party.inventory[Item(26)] = 10                   // long bows
         party.inventory[Item(30)] = 10                   // plate mail
         party.strength = 10
-        var b = Battle(monster: Monster(kind: 8), party: party, theyWereSurprised: true, surprise: 2, rng: &rng)
+        var b = Battle(foe: .monsters(Monster(kind: 8)), party: party, theyWereSurprised: true, surprise: 2, rng: &rng)
         for _ in 0..<50 where !b.isWon && !b.isLost { b.round(rng: &rng) }
         #expect(b.isWon)
         #expect(b.sizeUp.hasPrefix("THERE ARE \(b.theirNumber) OF THEM."))

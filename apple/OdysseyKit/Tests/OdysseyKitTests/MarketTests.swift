@@ -93,6 +93,7 @@ struct MarketTests {
 
     @Test func eatingAndStarving() {
         var e = Expedition(seed: 2)
+        e.roadEvents = false
         e.party.foodPacks = 2
         for _ in 0..<10 { e.passTurn() }                  // two rations
         #expect(e.party.foodPacks == 0)
