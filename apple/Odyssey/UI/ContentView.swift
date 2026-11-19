@@ -24,7 +24,8 @@ struct ContentView: View {
             let args = ProcessInfo.processInfo.arguments
             if let i = args.firstIndex(of: "--quest"), i + 1 < args.count, let seed = UInt64(args[i + 1]),
                model.phase == .title {
-                model.newQuest(seed: seed)
+                let meet = args.firstIndex(of: "--meet").flatMap { $0 + 1 < args.count ? args[$0 + 1] : nil }
+                model.newQuest(seed: seed, meeting: meet)
             }
         }
     }

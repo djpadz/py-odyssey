@@ -20,6 +20,11 @@ xcodebuild -project Odyssey.xcodeproj -scheme Odyssey -destination 'platform=mac
 open build/Build/Products/Debug/Odyssey.app --args --quest 1980   # skip the title, fixed island
 ```
 
+Debug builds also take `--meet <what>` (with `--quest`) to start face to face with something:
+a monster by name or number (`dragons`, `13`; add `!` to attack), `caravan`, `wizard`, `warlock`,
+`warriors`, `chest`, an obstacle (`thicket`, `ravine`, `bog`, `crevasse`, `cliff`), or `sealed`,
+which seals every site (`temple`, `castle`... also stand the party at that site's door).
+
 The rules have their own tests: `cd apple/OdysseyKit && swift test`.
 
 ## Playing
@@ -44,6 +49,7 @@ The rules have their own tests: `cd apple/OdysseyKit && swift test`.
 | `OdysseyKit/.../Visit.swift`, `Combat.swift` | Temples, ruins, castles, tombs and huts (9000–9915), monsters (1200–1370) and battles (6000–6980). |
 | `OdysseyKit/.../Road.swift` | What happens between sites (725–3400): encounters, traps and obstacles, played out as visits with no site. |
 | `Odyssey/World/` | The 3D island: heightfield terrain and texture, vegetation and site models, the party. |
+| `Odyssey/World/Cast.swift` | Whoever the party is dealing with, in 3D: the twenty monsters, caravans, wizards, warriors, and chests. |
 | `Odyssey/UI/` | Title, HUD, market, inventory and site panels. |
 | `Odyssey/GameModel.swift` | Ties the rules, the scene, the camera and input together. |
 | `project.yml` | XcodeGen spec for the one multiplatform app target. |
@@ -65,6 +71,9 @@ Map pixels (the original's 280×160 island coordinates) are the rules' unit of p
   from or rob, a wizard or warlock, warriors who join as mercenaries or turn out to be bandits,
   a trap that catches men until the right thing frees them, or an obstacle that bars the way
   until the right thing clears it.
+- In 3D: monsters and the people of the road stand across the party's path (flyers wheel
+  overhead), lunge each round of a battle and fall as they're killed; chests appear to be opened;
+  searched sites are sealed (slabbed, boarded up or choked with rubble); obstacles fill their cell.
 
 ## Changes from the original
 
@@ -80,7 +89,6 @@ Map pixels (the original's 280×160 island coordinates) are the rules' unit of p
 
 ## Next
 
-1. Monsters, chests, sealed sites and obstacles shown in 3D.
-2. Using magic items (8100+) and the other commands: drop, get, ride (the horse).
-3. Saving and resuming a quest (including the obstacles, which live outside the map array).
-4. The ship and the sea voyage, the catacombs, and the Caliph's fortress.
+1. Using magic items (8100+) and the other commands: drop, get, ride (the horse).
+2. Saving and resuming a quest (including the obstacles, which live outside the map array).
+3. The ship and the sea voyage, the catacombs, and the Caliph's fortress.

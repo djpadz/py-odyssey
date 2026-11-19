@@ -3,7 +3,7 @@ import simd
 
 /// The colours the props are painted in; each becomes one material.
 enum Paint: CaseIterable, Sendable {
-    case trunk, leaves, leavesDark, palm, reed, rock, stone, paleStone, darkStone, tile, wood, thatch, gold
+    case trunk, leaves, leavesDark, palm, reed, rock, stone, paleStone, darkStone, tile, wood, thatch, gold, mud, abyss
 
     var colour: SIMD3<Float> {
         switch self {
@@ -20,6 +20,8 @@ enum Paint: CaseIterable, Sendable {
         case .wood: [0.45, 0.31, 0.18]
         case .thatch: [0.72, 0.60, 0.33]
         case .gold: [0.95, 0.75, 0.30]
+        case .mud: [0.24, 0.20, 0.11]
+        case .abyss: [0.02, 0.02, 0.03]
         }
     }
 
@@ -246,6 +248,116 @@ extension Props {
             p[.thatch].addGable(base: [-1, 1.5, -1], size: [2, 0.6, 1.4])
             p[.stone].addFrustum(base: [5, 0.4, -5], bottomRadius: 1.4, topRadius: 1.1, height: 9, sides: 8)
             p[.gold].addFrustum(base: [5, 9.4, -5], bottomRadius: 1.4, topRadius: 0, height: 2.5, sides: 8)
+        }
+        return p
+    }
+}
+
+// MARK: - Seals and obstacles
+
+extension Props {
+    /// What closes a site once the party has searched it, in the site model's frame:
+    /// a slab over the doorway, planks across a hut's, rubble filling a ruin.
+    static func seal(of site: Site, seed: Int) -> Props {
+        var p = Props()
+        var rng = SeededRandom(seed: UInt64(seed))
+        func rubble(at c: SIMD3<Float>, spread: Float, count: Int) {
+            for _ in 0..<count {
+                let off = SIMD3<Float>(.random(in: -spread...spread, using: &rng), 0, .random(in: -spread...spread, using: &rng) * 0.5)
+                p[.rock].addSpindle(center: c + off, radius: .random(in: 0.4...0.9, using: &rng),
+                                    up: .random(in: 0.4...0.9, using: &rng), down: 0.3, sides: 5,
+                                    yaw: .random(in: 0...6, using: &rng))
+            }
+        }
+        switch site {
+        case .temple:
+            p[.stone].addBox(base: [0, 1.6, 2.8], size: [3.4, 4.6, 0.5])
+            rubble(at: [0, 1.6, 3.4], spread: 1.6, count: 5)
+        case .castle:
+            p[.rock].addBox(base: [0, 0.4, 7.45], size: [3.2, 3.8, 0.6])
+            rubble(at: [0, 0.4, 8.1], spread: 1.6, count: 5)
+        case .tomb:
+            p[.rock].addBox(base: [0, 0.4, 6.25], size: [3.8, 4.0, 0.6])
+            rubble(at: [0, 0.4, 6.9], spread: 1.8, count: 6)
+        case .hut:
+            for (y, tilt) in [(0.5, 0.35), (1.1, -0.3), (1.6, 0.25)] as [(Float, Float)] {
+                p[.wood].addFrustum(base: [-0.9, y, 3.35], bottomRadius: 0.1, topRadius: 0.1, height: 1.9, sides: 4,
+                                    rotation: simd_quatf(angle: -.pi / 2 + tilt, axis: [0, 0, 1]))
+            }
+        case .ruin:
+            rubble(at: [0, 0.4, 0], spread: 4, count: 14)
+            p[.darkStone].addBox(base: [0, 0.4, 0], size: [4, 2.2, 3], yaw: 0.3)
+        case .city:
+            break
+        }
+        return p
+    }
+
+    /// What bars a cell, in world coordinates, spread across the cell's 28 x 16 m.
+    static func obstacle(_ kind: Obstacle.Kind, in cell: Cell, landscape: Landscape, seed: Int) -> Props {
+        var p = Props()
+        var rng = SeededRandom(seed: UInt64(bitPattern: Int64(seed)))
+        func r(_ lo: Float, _ hi: Float) -> Float { Float.random(in: lo...hi, using: &rng) }
+        /// The ground at (u, v) across the cell, each 0...1.
+        func ground(_ u: Float, _ v: Float) -> SIMD3<Float> {
+            let x = (Double(cell.col) + Double(u)) * Island.cellWidth
+            let y = (Double(cell.row) + Double(v)) * Island.cellHeight
+            let w = WorldScale.world(x: x, y: y)
+            return [w.x, max(landscape.height(x: x, y: y), 0.1), w.y]
+        }
+
+        switch kind {
+        case .thicket:
+            for _ in 0..<34 {
+                let c = ground(r(0.06, 0.94), r(0.08, 0.92))
+                let radius = r(1.4, 2.4)
+                p[Bool.random(using: &rng) ? .leaves : .leavesDark]
+                    .addSpindle(center: c + [0, r(0.6, 1.4), 0], radius: radius, up: radius * r(1, 1.4),
+                                down: 0.8, sides: 6, yaw: r(0, 6))
+            }
+            for _ in 0..<16 {
+                p[.trunk].addFrustum(base: ground(r(0.05, 0.95), r(0.05, 0.95)), bottomRadius: 0.12, topRadius: 0,
+                                     height: r(2, 3.4), sides: 4,
+                                     rotation: simd_quatf(angle: r(0.2, 0.7), axis: simd_normalize([r(-1, 1), 0, r(-1, 1)])))
+            }
+        case .bog:
+            for _ in 0..<9 {
+                p[.mud].addFrustum(base: ground(r(0.12, 0.88), r(0.15, 0.85)) - [0, 0.05, 0], bottomRadius: r(2.2, 4),
+                                   topRadius: r(2, 3.8), height: 0.2, sides: 9, yaw: r(0, 6))
+            }
+            for _ in 0..<7 { p.addReeds(ground(r(0.05, 0.95), r(0.05, 0.95)), rng: &rng) }
+            for _ in 0..<3 { p.addDeadTree(ground(r(0.1, 0.9), r(0.1, 0.9)) - [0, 0.2, 0], rng: &rng) }
+        case .cliff:
+            for _ in 0..<16 {
+                let base = ground(r(0.25, 0.75), r(0.3, 0.7)) - [0, 1, 0]
+                p[Bool.random(using: &rng) ? .rock : .darkStone]
+                    .addBox(base: base, size: [r(3, 5.5), r(6, 11), r(2.5, 4.5)], yaw: r(0, 1.5))
+            }
+            for _ in 0..<8 {
+                p[.rock].addSpindle(center: ground(r(0.1, 0.9), r(0.1, 0.9)), radius: r(1.2, 2.5), up: r(1, 2.5),
+                                    down: 0.5, sides: 5, yaw: r(0, 6))
+            }
+        case .ravine, .crevasse:
+            // A dark gash zigzagging across the cell, with broken rock along its lips.
+            let edge: Paint = kind == .crevasse ? .paleStone : .rock
+            let steps = 14
+            var lips: [(SIMD3<Float>, SIMD3<Float>)] = []
+            for i in 0...steps {
+                let u = 0.02 + 0.96 * Float(i) / Float(steps)
+                let v = 0.5 + 0.18 * sin(Float(i) * 1.3 + r(-0.2, 0.2))
+                let half = r(1.4, 2.2) / (Float(Island.cellHeight) * WorldScale.metresPerPixel)
+                lips.append((ground(u, v - half) + [0, 0.08, 0], ground(u, v + half) + [0, 0.08, 0]))
+            }
+            for i in 0..<steps {
+                let (a, b) = lips[i], (c, d) = lips[i + 1]
+                p[.abyss].addTriangle(a, b, d)        // north lip, south lip, facing up
+                p[.abyss].addTriangle(a, d, c)
+            }
+            for (north, south) in lips {
+                for lip in [north, south] where r(0, 1) < 0.8 {
+                    p[edge].addSpindle(center: lip, radius: r(0.5, 1.1), up: r(0.4, 1.2), down: 0.3, sides: 5, yaw: r(0, 6))
+                }
+            }
         }
         return p
     }

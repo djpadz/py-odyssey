@@ -40,10 +40,13 @@ final class GameModel {
     @ObservationIgnored private var toastUntil: Double = 0
     @ObservationIgnored private var clock: Double = 0
 
-    func newQuest(seed: UInt64 = .random(in: 1...UInt64(UInt32.max))) {
+    func newQuest(seed: UInt64 = .random(in: 1...UInt64(UInt32.max)), meeting: String? = nil) {
         phase = .loading
         loadError = nil
-        let expedition = Expedition(seed: seed)
+        var expedition = Expedition(seed: seed)
+        #if DEBUG
+        if let meeting { GameModel.rehearse(meeting, in: &expedition) }
+        #endif
         self.expedition = expedition
         Task {
             do {
@@ -59,6 +62,35 @@ final class GameModel {
             }
         }
     }
+
+    #if DEBUG
+    /// `--meet <what>`, for looking at things: a monster by name or number (add `!` to
+    /// attack it), caravan, wizard, warlock, warriors, chest, an obstacle's kind, or sealed.
+    private static func rehearse(_ what: String, in e: inout Expedition) {
+        var name = what.uppercased()
+        let attack = name.hasSuffix("!")
+        if attack { name.removeLast() }
+        switch name {
+        case "CARAVAN": e.rehearse(.caravan)
+        case "WIZARD": e.rehearse(.wizard(good: true))
+        case "WARLOCK": e.rehearse(.wizard(good: false))
+        case "WARRIORS": e.rehearse(.warriors)
+        case "CHEST": e.rehearse(.chest)
+        case "SEALED": e.sealEverySite()
+        case "TEMPLE", "RUIN", "CASTLE", "TOMB", "HUT":
+            e.sealEverySite(standingBy: Site.allCases.first { $0.distantName == name })
+        case "THICKET": e.rehearseObstacle(.thicket)
+        case "RAVINE": e.rehearseObstacle(.ravine)
+        case "BOG": e.rehearseObstacle(.bog)
+        case "CREVASSE": e.rehearseObstacle(.crevasse)
+        case "CLIFF": e.rehearseObstacle(.cliff)
+        default:
+            guard let kind = Int(name) ?? (1...20).first(where: { Monster(kind: $0).name.hasPrefix(name) }) else { return }
+            e.rehearse(.monstersAhead(Monster(kind: kind)))
+        }
+        if attack { e.act(.attack) }
+    }
+    #endif
 
     func backToTitle() {
         phase = .title
@@ -183,6 +215,8 @@ final class GameModel {
         world.party.update(position: position, heading: heading, moving: moved, dt: dt) {
             max(ground.height(world: $0), 0.1)
         }
+        world.sync(e)
+        world.cast.update(visit: e.visit, party: position, heading: heading, dt: dt)
 
         // The camera trails the party, easing after it; in the bazaar it circles the city.
         var focus = position + [0, 1.5, 0]

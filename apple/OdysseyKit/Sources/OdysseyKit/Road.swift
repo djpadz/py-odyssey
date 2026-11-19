@@ -28,23 +28,26 @@ public struct Trap: Hashable, Sendable {
 
 /// Something in the way (3000-3400) until the right thing clears it (U1-U3).
 public struct Obstacle: Hashable, Sendable {
+    public enum Kind: Sendable { case ravine, thicket, bog, crevasse, cliff }
+
+    public let kind: Kind
     public let words: String
     let clears: Set<Item>
 
     static func across(_ terrain: Terrain, rng: inout SeededRandom) -> Obstacle? {
         switch terrain {
         case .jungle where rng.rnd(2) == 1:
-            Obstacle(words: "YOU'VE COME TO A DEEP, NARROW RAVINE.", clears: [Item(31), Item(7)])
+            Obstacle(kind: .ravine, words: "YOU'VE COME TO A DEEP, NARROW RAVINE.", clears: [Item(31), Item(7)])
         case .jungle:
-            Obstacle(words: "YOU'VE COME TO A DENSE THICKET, TOO TANGLED TO WALK THROUGH.",
+            Obstacle(kind: .thicket, words: "YOU'VE COME TO A DENSE THICKET, TOO TANGLED TO WALK THROUGH.",
                      clears: [Item(4), Item(22), Item(21)])
         case .swamp:
-            Obstacle(words: "YOU'VE COME TO AN AREA OF QUICKSAND AND DEEP BOGS. YOU CAN'T TELL WHERE THE SOLID LAND IS.",
+            Obstacle(kind: .bog, words: "YOU'VE COME TO AN AREA OF QUICKSAND AND DEEP BOGS. YOU CAN'T TELL WHERE THE SOLID LAND IS.",
                      clears: [Item(3)])
         case .mountains where rng.rnd(2) == 1:
-            Obstacle(words: "YOU'VE COME TO A DEEP CREVASSE.", clears: [Item(21)])
+            Obstacle(kind: .crevasse, words: "YOU'VE COME TO A DEEP CREVASSE.", clears: [Item(21)])
         case .mountains:
-            Obstacle(words: "YOU'VE COME TO A SHEER CLIFF.", clears: [Item(7)])
+            Obstacle(kind: .cliff, words: "YOU'VE COME TO A SHEER CLIFF.", clears: [Item(7)])
         case .ocean:
             nil
         }
@@ -234,3 +237,38 @@ extension Expedition {
         v.stage = .finished
     }
 }
+
+#if DEBUG
+extension Expedition {
+    /// For looking at things in the app: something met here and now.
+    public mutating func rehearse(_ stage: Visit.Stage) {
+        visit = Visit(cell: cell, stage: stage)
+    }
+
+    /// For looking at things: an obstacle across the cell to the north (or wherever is open).
+    public mutating func rehearseObstacle(_ kind: Obstacle.Kind) {
+        let obstacle = Obstacle(kind: kind, words: "", clears: [])
+        for (_, dc, dr) in Island.compass {
+            let c = Cell(col: cell.col + dc, row: cell.row + dr)
+            if island.terrain(c) != .ocean && island.site(c) == nil {
+                island.bar(c, with: obstacle)
+                return
+            }
+        }
+    }
+
+    /// For looking at things: every site sealed, and the party just south of the first
+    /// of a kind (whose door faces south).
+    public mutating func sealEverySite(standingBy kind: Site? = nil) {
+        for (cell, _) in island.sites { island.seal(cell) }
+        guard let kind else { return }
+        for (cell, site) in island.sites where site == kind {
+            let south = Cell(col: cell.col, row: cell.row + 1)
+            if island.terrain(south) != .ocean && island.site(south) == nil {
+                teleport(to: south)
+                return
+            }
+        }
+    }
+}
+#endif

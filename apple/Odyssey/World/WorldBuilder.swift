@@ -4,12 +4,49 @@ import OdysseyKit
 import RealityKit
 import simd
 
-/// Everything the scene needs, built for one island.
+/// Everything the scene needs, built for one island, and the parts that change as
+/// the quest goes on: sealed sites, obstacles, and whoever the party is dealing with.
 @MainActor
-struct World {
+final class World {
     let root: Entity
     let party: PartyFigure
     let landscape: Landscape
+    let cast: Cast
+    private let materials: [Paint: PhysicallyBasedMaterial]
+    private let seals: [Cell: Entity]
+    private var obstacles: [Cell: Entity] = [:]
+
+    init(root: Entity, party: PartyFigure, landscape: Landscape, materials: [Paint: PhysicallyBasedMaterial],
+         seals: [Cell: Entity]) {
+        self.root = root
+        self.party = party
+        self.landscape = landscape
+        self.materials = materials
+        self.seals = seals
+        cast = Cast(landscape: landscape, light: root)
+        root.addChild(cast.root)
+    }
+
+    /// Bring the scenery into line with the quest.
+    func sync(_ expedition: Expedition) {
+        for (cell, seal) in seals where !seal.isEnabled && expedition.island.isSealed(cell) {
+            seal.isEnabled = true
+        }
+        let barred = expedition.island.obstacles
+        for (cell, entity) in obstacles where barred[cell] == nil {
+            entity.removeFromParent()
+            obstacles[cell] = nil
+        }
+        for (cell, obstacle) in barred where obstacles[cell] == nil {
+            let props = Props.obstacle(obstacle.kind, in: cell, landscape: landscape,
+                                       seed: Int(expedition.seed) &+ cell.col * 31 &+ cell.row)
+            guard let e = try? WorldBuilder.entity(for: props, materials: materials) else { continue }
+            e.name = "obstacle-\(cell.col)-\(cell.row)"
+            WorldBuilder.applyLightReceiver(e, light: root)
+            root.addChild(e)
+            obstacles[cell] = e
+        }
+    }
 }
 
 /// The parts of the world that can be computed off the main thread.
@@ -18,7 +55,7 @@ private struct Blueprint: Sendable {
     let mesh: Landscape.MeshData
     let texture: (width: Int, height: Int, pixels: [UInt8])
     let vegetation: Props
-    let sites: [(position: SIMD3<Float>, site: Site, model: Props)]
+    let sites: [(position: SIMD3<Float>, cell: Cell, site: Site, model: Props, seal: Props)]
 }
 
 @MainActor
@@ -35,7 +72,9 @@ enum WorldBuilder {
                 let h = [(-8.0, 0.0), (8, 0), (0, -5), (0, 5), (0, 0)].map {
                     landscape.height(world: p + [Float($0.0), Float($0.1)])
                 }.min()!
-                return (position: SIMD3<Float>(p.x, max(h, 0.6), p.y), site: entry.site, model: Props.model(of: entry.site, seed: Int(seed) &+ i))
+                return (position: SIMD3<Float>(p.x, max(h, 0.6), p.y), cell: entry.cell, site: entry.site,
+                        model: Props.model(of: entry.site, seed: Int(seed) &+ i),
+                        seal: Props.seal(of: entry.site, seed: Int(seed) &+ i))
             }
             let clear = sites.map { SIMD2<Float>($0.position.x, $0.position.z) } + [start]
             return Blueprint(landscape: landscape, mesh: landscape.meshData(), texture: landscape.texture(),
@@ -55,10 +94,15 @@ enum WorldBuilder {
         let vegetation = try entity(for: blueprint.vegetation, materials: materials)
         vegetation.name = "vegetation"
         root.addChild(vegetation)
+        var seals: [Cell: Entity] = [:]
         for site in blueprint.sites {
             let e = try entity(for: site.model, materials: materials)
             e.name = "site-\(site.site)"
             e.position = site.position
+            let seal = try entity(for: site.seal, materials: materials)
+            seal.isEnabled = false
+            e.addChild(seal)
+            seals[site.cell] = seal
             root.addChild(e)
         }
 
@@ -76,10 +120,12 @@ enum WorldBuilder {
         root.components.set(ImageBasedLightComponent(source: .single(sky.environment), intensityExponent: 0.6))
         applyLightReceiver(root, light: root)
 
-        return World(root: root, party: party, landscape: blueprint.landscape)
+        let world = World(root: root, party: party, landscape: blueprint.landscape, materials: materials, seals: seals)
+        world.sync(expedition)
+        return world
     }
 
-    private static func applyLightReceiver(_ e: Entity, light: Entity) {
+    static func applyLightReceiver(_ e: Entity, light: Entity) {
         if e.components.has(ModelComponent.self) {
             e.components.set(ImageBasedLightReceiverComponent(imageBasedLight: light))
         }
@@ -92,11 +138,11 @@ enum WorldBuilder {
         m.baseColor = .init(tint: .init(red: CGFloat(c.x), green: CGFloat(c.y), blue: CGFloat(c.z), alpha: 1))
         m.roughness = .init(floatLiteral: paint.roughness)
         m.metallic = .init(floatLiteral: paint.metallic)
-        m.faceCulling = paint == .palm ? .none : .back
+        m.faceCulling = paint == .palm || paint == .abyss ? .none : .back
         return m
     }
 
-    private static func entity(for props: Props, materials: [Paint: PhysicallyBasedMaterial]) throws -> Entity {
+    static func entity(for props: Props, materials: [Paint: PhysicallyBasedMaterial]) throws -> Entity {
         let e = Entity()
         for (paint, builder) in props.builders where !builder.isEmpty {
             let model = try builder.entity(materials[paint]!)

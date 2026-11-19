@@ -56,7 +56,7 @@ struct RoadTests {
             return e.island.terrain(c) != .ocean && e.island.site(c) == nil
         })
         let ahead = Cell(x: e.x + dx * Island.cellWidth, y: e.y + dy * Island.cellHeight)
-        let thicket = Obstacle(words: "YOU'VE COME TO A DENSE THICKET, TOO TANGLED TO WALK THROUGH.",
+        let thicket = Obstacle(kind: .thicket, words: "YOU'VE COME TO A DENSE THICKET, TOO TANGLED TO WALK THROUGH.",
                                clears: [Item(4), Item(22), Item(21)])
         e.island.bar(ahead, with: thicket)
 
