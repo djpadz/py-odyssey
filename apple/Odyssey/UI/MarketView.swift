@@ -270,7 +270,24 @@ struct InventoryView: View {
 
     @ViewBuilder
     private func actions(_ item: Item, have: Int, _ e: Expedition) -> some View {
-        if e.voyage != nil {
+        if e.catacombs != nil {
+            HStack(spacing: 10) {
+                Button("Use") { model.useBelow(item) }
+                Stepper("\(count)", value: $count, in: 1...have).font(.fell(16)).fixedSize()
+                Button("Put down") {
+                    model.putDown(item, quantity: count)
+                    chosen = nil
+                }
+            }
+            .buttonStyle(.bordered)
+            .tint(.ink)
+            .font(.fell(16))
+        } else if e.fortress != nil {
+            Button("Use") { model.useAtFortress(item) }
+                .buttonStyle(.bordered)
+                .tint(.ink)
+                .font(.fell(16))
+        } else if e.voyage != nil {
             seaActions(item, have: have)
         } else {
             islandActions(item, have: have, e)

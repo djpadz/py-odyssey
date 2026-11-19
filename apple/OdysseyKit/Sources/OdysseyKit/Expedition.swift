@@ -55,6 +55,7 @@ public struct Party: Sendable, Codable {
 public struct Expedition: Sendable, Codable {
     private enum CodingKeys: String, CodingKey {
         case seed, island, party, x, y, rng, walked, turns, hungryRations, mount, seen, voyage, hasOrb
+        case catacombs, fortress, ending, recruited, killed, shipsSunk
     }
 
     public let seed: UInt64
@@ -88,6 +89,16 @@ public struct Expedition: Sendable, Codable {
     public internal(set) var voyage: Voyage?
     /// The High One's Orb (Z8).
     public internal(set) var hasOrb = false
+    /// Below the wizard's temple, or on Lapour (CAVERN APVENTURE).
+    public internal(set) var catacombs: Catacombs?
+    public internal(set) var fortress: Fortress?
+    /// How the quest came out, once it has.
+    public internal(set) var ending: Ending?
+    /// The final reckoning's tallies: every man who ever joined (TOT, counting the ten
+    /// who set out), inhabitants killed (TEN) and ships sunk (TSH).
+    public internal(set) var recruited = 10
+    public internal(set) var killed = 0
+    public internal(set) var shipsSunk = 0
 
     /// After loading: step up to the site underfoot again, if the party was at one.
     public mutating func resume() {

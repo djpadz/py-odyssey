@@ -167,6 +167,7 @@ extension Expedition {
                 v.said += ["THEY ARE WANDERING MERCENARIES AND WILL JOIN YOUR PARTY FOR A SHARE IN THE LOOT.",
                            "THERE ARE \(n) OF THEM, ALL WITH SWORDS."]
                 party.men += n
+                recruited += n
                 gain(Item(22), n)
                 v.stage = .finished
             }
@@ -266,6 +267,37 @@ extension Expedition {
         voyage?.question = question
         voyage?.said = said
         if happening != nil || question != nil { voyage?.anchored = true }
+    }
+
+    /// For looking at things: below the temple with the light on (and, if `altar`, by
+    /// the altar), or up on Lapour.
+    public mutating func rehearseBelow(altar: Bool = false) {
+        voyage = Voyage()
+        voyage?.ashore = .catacombs
+        enterCatacombs()
+        catacombs?.light = true
+        if altar, var c = catacombs {
+            c.depth = 1
+            c.stairway = true
+            catacombs = c
+            hasOrb = false
+            while catacombs?.altar == nil {
+                catacombs?.stairway = true
+                order(.down)
+            }
+            let altar = catacombs!.altar!
+            catacombs?.x = altar.x
+            catacombs?.y = altar.y + 1
+            catacombs?.said = []
+        }
+    }
+
+    public mutating func rehearseLapour(orb: Bool = false) {
+        hasOrb = orb
+        voyage = Voyage()
+        voyage?.ashore = .fortress
+        landOnLapour()
+        approach()
     }
 
     /// For looking at things: something lying where the party stands.

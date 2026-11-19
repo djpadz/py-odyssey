@@ -9,14 +9,23 @@ struct ContentView: View {
         ZStack {
             Color.black.ignoresSafeArea()
             switch model.phase {
-            case .playing where model.atSea:
-                SeaView(model: model)
-                    .ignoresSafeArea()
-                SeaHUD(model: model)
             case .playing:
-                IslandView(model: model)
-                    .ignoresSafeArea()
-                HUD(model: model)
+                switch model.stage {
+                case .ended:
+                    EndingView(model: model)
+                case .catacombs:
+                    CatacombsView(model: model).ignoresSafeArea()
+                    CatacombsHUD(model: model)
+                case .fortress:
+                    FortressView(model: model).ignoresSafeArea()
+                    FortressHUD(model: model)
+                case .sea:
+                    SeaView(model: model).ignoresSafeArea()
+                    SeaHUD(model: model)
+                case .island:
+                    IslandView(model: model).ignoresSafeArea()
+                    HUD(model: model)
+                }
             case let .lost(words):
                 LostView(words: words) { model.backToTitle() }
             case .title, .loading:

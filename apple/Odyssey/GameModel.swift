@@ -29,6 +29,16 @@ final class GameModel {
     var mapImage: CGImage? { world?.map }
     var voyage: Voyage? { expedition?.voyage }
     var atSea: Bool { expedition?.voyage != nil }
+
+    /// Which part of the quest is on screen.
+    enum Stage { case island, sea, catacombs, fortress, ended }
+    var stage: Stage {
+        guard let e = expedition else { return .island }
+        if e.ending != nil { return .ended }
+        if e.catacombs != nil { return .catacombs }
+        if e.fortress != nil { return .fortress }
+        return e.voyage != nil ? .sea : .island
+    }
     /// The painted sea chart, for the map at sea.
     var chartImage: CGImage? { seaWorld?.map }
     /// Which way the party faces, radians clockwise from north.
@@ -36,6 +46,10 @@ final class GameModel {
 
     @ObservationIgnored private(set) var world: World?
     @ObservationIgnored private(set) var seaWorld: SeaWorld?
+    /// (Observed, so their scenes appear once built.)
+    private(set) var catacombWorld: CatacombWorld?
+    private(set) var fortressWorld: FortressWorld?
+    @ObservationIgnored private var nextCreep: Double = 0
     @ObservationIgnored var camera: PerspectiveCamera?
     @ObservationIgnored var updates: EventSubscription?
 
@@ -98,6 +112,7 @@ final class GameModel {
                 cameraFocus = nil
                 toast = nil
                 showingInventory = false
+                prepareStage()
                 phase = .playing
             } catch {
                 loadError = error.localizedDescription
@@ -181,6 +196,13 @@ final class GameModel {
         case "RAFT": e.rehearseVoyage(question: .raft(men: 4))
         case "MERCHANTMEN": e.rehearseVoyage(question: .merchants)
         case "TEMPLE": e.rehearseVoyage(.temple)
+        case "CATACOMBS": e.rehearseBelow()
+        case "ALTAR": e.rehearseBelow(altar: true)
+        case "LAPOUR": e.rehearseLapour()
+        case "END":
+            e.party.men = 40
+            e.rehearseLapour(orb: true)
+            for _ in 0..<8 { e.approach() }
         case "INVENTORY":
             for id in [20, 39, 40, 45, 47] { e.party.inventory[Item(id)] = 1 }
         case "SEALED": e.sealEverySite()
@@ -204,6 +226,8 @@ final class GameModel {
         expedition = nil
         world = nil
         seaWorld = nil
+        catacombWorld = nil
+        fortressWorld = nil
     }
 
     /// The L command: also name the terrain round about.
@@ -282,7 +306,76 @@ final class GameModel {
         expedition = e
         if e.market != nil { showingInventory = false }
         hear(e.takeNews(), lost: e.isLost)
+        prepareStage()
         save()
+    }
+
+    /// Build (or let go of) the scenes for the catacombs and the fortress as the
+    /// landing party comes and goes; the quest's end leaves nothing to continue.
+    private func prepareStage() {
+        guard let e = expedition else { return }
+        if e.catacombs != nil, catacombWorld == nil {
+            catacombWorld = CatacombWorld(light: nil)
+            cameraFocus = nil
+        } else if e.catacombs == nil {
+            catacombWorld = nil
+        }
+        if let f = e.fortress, fortressWorld == nil {
+            Task {
+                guard let sky = try? await WorldBuilder.makeSky() else { return }
+                fortressWorld = FortressWorld(f, sky: sky)
+                cameraFocus = nil
+            }
+        } else if e.fortress == nil {
+            fortressWorld = nil
+        }
+        if e.ending != nil { forgetSave() }
+    }
+
+    // MARK: Below ground and on Lapour
+
+    func creep(_ direction: Int) { voyaging { $0.creep(direction) } }
+    func orderBelow(_ o: Expedition.CatacombCommand) { voyaging { $0.order(o) } }
+    func answerBelow(_ yes: Bool) { voyaging { $0.answerBelow(yes) } }
+    func approach() { voyaging { $0.approach() } }
+    func retreat() { voyaging { $0.retreat() } }
+    func confirmRetreat(_ yes: Bool) { voyaging { $0.confirmRetreat(yes) } }
+
+    func useBelow(_ item: Item) {
+        showingInventory = false
+        voyaging { $0.useBelow(item) }
+    }
+
+    func putDown(_ item: Item, quantity: Int) {
+        voyaging { $0.putDown(item, quantity: quantity) }
+    }
+
+    func useAtFortress(_ item: Item) {
+        showingInventory = false
+        voyaging { $0.useAtFortress(item) }
+    }
+
+    /// The compass point (0 north, 1 east, 2 south, 3 west) nearest a way from the camera.
+    private func quarter(_ move: Move) -> Int {
+        let v: SIMD2<Float> = switch move {
+        case .forward: [0, 1]
+        case .back: [0, -1]
+        case .left: [-1, 0]
+        case .right: [1, 0]
+        }
+        let dir = SIMD2<Float>(-sin(cameraYaw), -cos(cameraYaw)) * v.y + SIMD2<Float>(cos(cameraYaw), -sin(cameraYaw)) * v.x
+        return (Int((atan2(dir.x, -dir.y) / (.pi / 2)).rounded()) % 4 + 4) % 4
+    }
+
+    /// An arrow key steps that way from the camera, and keeps stepping while held.
+    func creep(toward move: Move, down: Bool) {
+        if down {
+            held.insert(move)
+            creep(quarter(move))
+            nextCreep = clock + 0.3
+        } else {
+            held.remove(move)
+        }
     }
 
     func order(_ c: SeaCommand) { voyaging { $0.command(c) } }
@@ -392,11 +485,42 @@ final class GameModel {
         clock += Double(dt)
         let dt = min(dt, 0.1)
         if toast != nil && clock > toastUntil { toast = nil }
-        if e.voyage != nil {
-            tickSea(e, dt: dt)
-        } else if let world {
-            tickIsland(e, world: world, dt: dt)
+        switch stage {
+        case .catacombs: tickCatacombs(e, dt: dt)
+        case .fortress: tickFortress(e, dt: dt)
+        case .sea: tickSea(e, dt: dt)
+        case .island: if let world { tickIsland(e, world: world, dt: dt) }
+        case .ended: break
         }
+    }
+
+    /// A frame in the catacombs: the frenzies dart about, the party creeps on while
+    /// an arrow is held, and the camera looks down from above.
+    private func tickCatacombs(_ e: Expedition, dt: Float) {
+        guard let w = catacombWorld else { return }
+        var e = e
+        e.catacombsTick(dt: Double(dt))
+        expedition = e
+        let news = e.takeNews()
+        if !news.isEmpty {
+            hear(news, lost: e.isLost)
+            if e.isLost { return }
+        }
+        if let move = held.first, clock > nextCreep {
+            creep(quarter(move))
+            nextCreep = clock + 0.18
+        }
+        guard let c = expedition?.catacombs else { return }
+        w.update(c, hasOrb: e.hasOrb, dt: dt)
+        placeCamera(focus: CatacombWorld.place(Double(c.x), Double(c.y)), distance: min(cameraDistance, 30), dt: dt,
+                    pitch: max(cameraPitch, 1.05)) { _ in 0 }
+    }
+
+    /// A frame on Lapour: the party walks up to wherever it has got to.
+    private func tickFortress(_ e: Expedition, dt: Float) {
+        guard let w = fortressWorld, let f = e.fortress else { return }
+        w.update(f, ended: false, dt: dt)
+        placeCamera(focus: w.partyPosition + [0, 2, 0], distance: max(cameraDistance, 40), dt: dt) { _ in 0 }
     }
 
     /// A frame at sea: time passes, the ship sails, and the camera follows it.
@@ -503,10 +627,12 @@ final class GameModel {
     }
 
     /// The camera trails its focus, easing after it, never below the ground.
-    private func placeCamera(focus: SIMD3<Float>, distance: Float, dt: Float, ground: (SIMD2<Float>) -> Float) {
+    private func placeCamera(focus: SIMD3<Float>, distance: Float, dt: Float, pitch: Float? = nil,
+                             ground: (SIMD2<Float>) -> Float) {
         let eased = cameraFocus.map { simd_mix($0, focus, SIMD3(repeating: min(1, dt * 3))) } ?? focus
         cameraFocus = eased
-        let offset = SIMD3<Float>(sin(cameraYaw) * cos(cameraPitch), sin(cameraPitch), cos(cameraYaw) * cos(cameraPitch))
+        let pitch = pitch ?? cameraPitch
+        let offset = SIMD3<Float>(sin(cameraYaw) * cos(pitch), sin(pitch), cos(cameraYaw) * cos(pitch))
         var eye = eased + offset * distance
         eye.y = max(eye.y, ground([eye.x, eye.z]) + 3)
         camera?.look(at: eased, from: eye, relativeTo: nil)

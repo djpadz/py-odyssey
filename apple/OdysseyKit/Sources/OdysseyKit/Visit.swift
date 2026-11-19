@@ -304,6 +304,7 @@ extension Expedition {
             } else if party.alignment < 0 {
                 let joined = party.charisma / 2 + rng.rnd(3)
                 party.men += joined
+                recruited += joined
                 party.gold = max(party.gold - 50, 0)
                 v.said = ["\(joined) OF THEM ACCEPTED YOUR OFFER. FINDING YOUR GROUP TO BE KINDRED SOULS, THEY WILL JOIN IN YOUR QUEST."]
                 searchOn(&v)
@@ -331,6 +332,7 @@ extension Expedition {
             v.said = words
             if away {
                 party.men -= b.ourLosses
+                killed += b.theirLosses
                 v.stage = .finished          // the original leaves the ruin after a getaway
             } else {
                 b.round(rng: &rng)
@@ -401,6 +403,7 @@ extension Expedition {
         } else if b.isWon {
             party.experience += 5
             party.men -= b.ourLosses
+            killed += b.theirNumber
             if b.foe == .merchants {
                 caravanSpoils(&v)
                 return

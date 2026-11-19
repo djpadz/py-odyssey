@@ -149,6 +149,7 @@ extension Expedition {
         party.gold -= price * quantity
         if lot.item == .contract {
             party.men += quantity
+            recruited += quantity
         } else {
             party.inventory[lot.item, default: 0] += quantity
         }

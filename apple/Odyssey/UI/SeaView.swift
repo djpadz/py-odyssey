@@ -173,14 +173,6 @@ struct SeaHUD: View {
                     Button("Recover the ship") { model.recoverShip() }.keyboardShortcut("1", modifiers: [])
                     Button("Begin a new quest") { model.newQuest() }.keyboardShortcut("2", modifiers: [])
                 }
-            } else if let shore = v.ashore {
-                Text(shore == .catacombs
-                     ? "The catacombs aren't charted in this port yet. The landing party comes back aboard."
-                     : "The Caliph's fortress isn't charted in this port yet. The landing party comes back aboard.")
-                    .font(.fell(15, italic: true)).opacity(0.75)
-                buttons {
-                    Button("Back to the ship") { model.returnToShip() }.keyboardShortcut(.defaultAction)
-                }
             } else if let q = v.question {
                 oldVoice(q.words, size: 18).padding(.top, 4)
                 if q == .fishermen {

@@ -476,6 +476,7 @@ extension Expedition {
         guard var v = voyage, !v.lost, v.ashore == nil, v.question == nil, v.happening != .temple, !isLost
         else { return }
         v.said = []
+        defer { landingParty() }
         defer { voyage = v }
         switch c {
         case .watch:
@@ -626,8 +627,19 @@ extension Expedition {
         v.ashore = .fortress
     }
 
-    /// Back aboard from a shore this port doesn't reach yet.
+    /// The landing party goes where it has got to: into the catacombs, or up Lapour.
+    private mutating func landingParty() {
+        switch voyage?.ashore {
+        case .catacombs? where catacombs == nil: enterCatacombs()
+        case .fortress? where fortress == nil: landOnLapour()
+        default: break
+        }
+    }
+
+    /// Back aboard from the catacombs or Lapour (20055, 2520).
     public mutating func returnToShip() {
+        catacombs = nil
+        fortress = nil
         guard var v = voyage, v.ashore != nil else { return }
         v.ashore = nil
         v.happening = nil
@@ -680,6 +692,7 @@ extension Expedition {
         for _ in 1...3 {
             while rng.rnd(5) >= 2 { hits += 1 }
         }
+        shipsSunk += 3
         let cost = min(50 * hits, party.gold)
         party.gold -= cost
         v.happening = nil
@@ -716,6 +729,7 @@ extension Expedition {
         guard var v = voyage, let q = v.question, q.answers.contains(a) else { return }
         v.question = nil
         v.said = []
+        defer { landingParty() }
         defer { voyage = v }
         switch (q, a) {
         case (.merchants, .buy):
@@ -744,6 +758,7 @@ extension Expedition {
             if rng.rnd(2) == 0 {
                 v.said = ["THEY ARE MERCENARIES AND WILL JOIN YOUR QUEST. THEY ALL HAVE SWORDS."]
                 party.men += n
+                recruited += n
                 party.inventory[Item(22), default: 0] += n
                 v.question = .raftChest
             } else {
@@ -773,6 +788,7 @@ extension Expedition {
                 let n = party.charisma + rng.rnd(10)
                 v.said = ["THEY ARE MERCENARIES. \(n) OF THEM WISH TO JOIN YOUR FORCE, SIR. THEY ARE ALL ARMED."]
                 party.men += n
+                recruited += n
                 party.inventory[Item(22), default: 0] += n
                 sailOff(&v)
             }
@@ -829,6 +845,7 @@ extension Expedition {
     public mutating func useAtSea(_ item: Item, offering: Bool = false) {
         guard var v = voyage, v.question == nil, !v.lost, (party.inventory[item] ?? 0) > 0 else { return }
         v.said = []
+        defer { landingParty() }
         defer { voyage = v }
         let id = item.id
         if v.happening == .temple {
