@@ -12,12 +12,18 @@ final class World {
     let party: PartyFigure
     let landscape: Landscape
     let cast: Cast
+    /// The island from above, for the map: map pixels -`WorldScale.mapMargin` to the far edge
+    /// plus the margin, a texel per pixel.
+    let map: CGImage?
     private let materials: [Paint: PhysicallyBasedMaterial]
     private let seals: [Cell: Entity]
     private var obstacles: [Cell: Entity] = [:]
+    /// What lies about, keyed by cell, with the item and quantity it shows.
+    private var lying: [Cell: (key: Int, entity: Entity)] = [:]
 
     init(root: Entity, party: PartyFigure, landscape: Landscape, materials: [Paint: PhysicallyBasedMaterial],
-         seals: [Cell: Entity]) {
+         seals: [Cell: Entity], map: CGImage?) {
+        self.map = map
         self.root = root
         self.party = party
         self.landscape = landscape
@@ -46,6 +52,22 @@ final class World {
             root.addChild(e)
             obstacles[cell] = e
         }
+        // Things lying about: a sack at the middle of the cell.
+        var now: [Cell: Int] = [:]
+        for (cell, item, n) in expedition.island.lyingAbout { now[cell] = item.id * 1000 + n }
+        for (cell, marker) in lying where now[cell] != marker.key {
+            marker.entity.removeFromParent()
+            lying[cell] = nil
+        }
+        for (cell, key) in now where lying[cell] == nil {
+            let c = cell.center
+            let p = WorldScale.world(x: c.x, y: c.y)
+            let sack = Bestiary.sack()
+            sack.position = [p.x, max(landscape.height(world: p), 0.1), p.y]
+            WorldBuilder.applyLightReceiver(sack, light: root)
+            root.addChild(sack)
+            lying[cell] = (key, sack)
+        }
     }
 }
 
@@ -56,6 +78,7 @@ private struct Blueprint: Sendable {
     let texture: (width: Int, height: Int, pixels: [UInt8])
     let vegetation: Props
     let sites: [(position: SIMD3<Float>, cell: Cell, site: Site, model: Props, seal: Props)]
+    let map: (width: Int, height: Int, pixels: [UInt8])
 }
 
 @MainActor
@@ -77,9 +100,10 @@ enum WorldBuilder {
                         seal: Props.seal(of: entry.site, seed: Int(seed) &+ i))
             }
             let clear = sites.map { SIMD2<Float>($0.position.x, $0.position.z) } + [start]
-            return Blueprint(landscape: landscape, mesh: landscape.meshData(), texture: landscape.texture(),
+            let texture = landscape.texture()
+            return Blueprint(landscape: landscape, mesh: landscape.meshData(), texture: texture,
                              vegetation: Props.vegetation(island: island, landscape: landscape, clear: clear, seed: seed),
-                             sites: sites)
+                             sites: sites, map: mapPixels(texture, landscape: landscape))
         }.value
 
         let root = Entity()
@@ -120,9 +144,40 @@ enum WorldBuilder {
         root.components.set(ImageBasedLightComponent(source: .single(sky.environment), intensityExponent: 0.6))
         applyLightReceiver(root, light: root)
 
-        let world = World(root: root, party: party, landscape: blueprint.landscape, materials: materials, seals: seals)
+        let map = try? cgImage(width: blueprint.map.width, height: blueprint.map.height, pixels: blueprint.map.pixels)
+        let world = World(root: root, party: party, landscape: blueprint.landscape, materials: materials, seals: seals,
+                          map: map)
         world.sync(expedition)
         return world
+    }
+
+    /// The ground texture cut down to the island and its margin, with the sea painted
+    /// in, deepening offshore.
+    nonisolated static func mapPixels(_ t: (width: Int, height: Int, pixels: [UInt8]),
+                                      landscape: Landscape) -> (width: Int, height: Int, pixels: [UInt8]) {
+        let m = WorldScale.mapMargin
+        let w = Int(Island.width + 2 * m), h = Int(Island.height + 2 * m)
+        let per = Landscape.texelsPerPixel
+        var px = [UInt8](repeating: 255, count: w * h * 4)
+        let shallow = SIMD3<Float>(0.28, 0.55, 0.62), deep = SIMD3<Float>(0.07, 0.24, 0.40)
+        for y in 0..<h {
+            for x in 0..<w {
+                let mx = Double(x) - m + 0.5, my = Double(y) - m + 0.5
+                let tx = Int((mx - landscape.originX) * Double(per)), ty = Int((my - landscape.originY) * Double(per))
+                let ti = (min(max(ty, 0), t.height - 1) * t.width + min(max(tx, 0), t.width - 1)) * 4
+                var c = SIMD3<Float>(Float(t.pixels[ti]), Float(t.pixels[ti + 1]), Float(t.pixels[ti + 2])) / 255
+                let ground = landscape.height(x: mx, y: my)
+                if ground < 0 {
+                    let sea = simd_mix(shallow, deep, SIMD3(repeating: smoothstep(0, 3, -ground)))
+                    c = simd_mix(c, sea, SIMD3(repeating: smoothstep(0, 0.5, -ground)))
+                }
+                let o = (y * w + x) * 4
+                px[o] = UInt8(c.x * 255)
+                px[o + 1] = UInt8(c.y * 255)
+                px[o + 2] = UInt8(c.z * 255)
+            }
+        }
+        return (w, h, px)
     }
 
     static func applyLightReceiver(_ e: Entity, light: Entity) {

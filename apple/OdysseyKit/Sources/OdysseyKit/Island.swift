@@ -142,6 +142,33 @@ public struct Island: Sendable {
         obstacles[cell] = nil
     }
 
+    /// What lies on the ground in a cell (QQ of item II, for II below 51).
+    public func lying(_ cell: Cell) -> (item: Item, quantity: Int)? {
+        let v = value(cell) % 10000, id = v % 100
+        guard cell.isOnMap, (1...49).contains(id), v / 100 > 0 else { return nil }
+        return (Item(id), v / 100)
+    }
+
+    /// Everything lying about the island.
+    public var lyingAbout: [(cell: Cell, item: Item, quantity: Int)] {
+        allCells.compactMap { c in lying(c).map { (c, $0.item, $0.quantity) } }
+    }
+
+    /// Whether nothing (no site, no item) occupies the cell.
+    func isBare(_ cell: Cell) -> Bool {
+        cell.isOnMap && value(cell) % 10000 == 0
+    }
+
+    mutating func lay(_ item: Item, _ quantity: Int, in cell: Cell) {
+        guard cell.isOnMap else { return }
+        lc[cell.index] = lc[cell.index] / 10000 * 10000 + quantity * 100 + item.id
+    }
+
+    mutating func clearGround(_ cell: Cell) {
+        guard cell.isOnMap else { return }
+        lc[cell.index] = lc[cell.index] / 10000 * 10000
+    }
+
     public var sites: [(cell: Cell, site: Site)] {
         allCells.compactMap { cell in site(cell).map { (cell, $0) } }
     }
@@ -175,6 +202,10 @@ public struct Island: Sendable {
                 let name = (l == .ocean && 160 < x && x < 225 && 75 < y && y < 130) ? "LAKE" : l.name
                 text += "\(name) TO THE \(dir). "
             }
+        }
+        if let (item, n) = lying(here) {
+            // Line 612: what lies here is all the report says.
+            return "YOU ARE IN THE \(tt.name). YOU CAN SEE \(n) \(item.name(quantity: n)) HERE."
         }
         if !sawSite && !terrainChanges {
             text += "NOTHING BUT \(tt.name) IN ALL DIRECTIONS."

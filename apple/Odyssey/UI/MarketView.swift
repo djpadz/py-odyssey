@@ -214,12 +214,16 @@ struct MarketView: View {
     }
 }
 
-/// What the party carries.
+/// What the party carries, and its condition (the original's C, lines 800-812).
+/// Choosing a thing offers to use it or drop some here.
 struct InventoryView: View {
     let model: GameModel
+    @State private var chosen: Item?
+    @State private var count = 1
 
     var body: some View {
-        if let party = model.expedition?.party {
+        if let e = model.expedition {
+            let party = e.party
             Scroll {
                 HStack {
                     Text("Inventory").font(.blackletter(26))
@@ -233,10 +237,22 @@ struct InventoryView: View {
                     row(.quadroon, party.gold)
                     ForEach(party.belongings, id: \.item) { row($0.item, $0.quantity) }
                 }
+                if let item = chosen, let have = party.inventory[item], have > 0 {
+                    actions(item, have: have, e)
+                }
                 oldVoice("YOUR \(party.men) MEN CAN CARRY \(party.capacity). YOU HAVE \(party.load).", size: 15)
                     .padding(.top, 6)
+                Divider().overlay(Color.ink.opacity(0.3))
+                Text("Status Report").font(.blackletter(20))
+                Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 2) {
+                    GridRow { stat("# IN PARTY", party.men); stat("STRENGTH", party.strength) }
+                    GridRow { stat("CHARISMA", party.charisma); stat("EXPER.", party.experience) }
+                    GridRow { stat("WISDOM", party.wisdom); stat("SPEED", party.speed) }
+                    GridRow { stat("DEXTERITY", party.dexterity); stat("ALIGN.", party.alignment) }
+                }
             }
-            .frame(maxWidth: 360)
+            .frame(maxWidth: 380)
+            .onChange(of: chosen) { count = 1 }
         }
     }
 
@@ -244,9 +260,46 @@ struct InventoryView: View {
         GridRow {
             Text("\(quantity)").gridColumnAlignment(.trailing).monospacedDigit()
             Text(item.name(quantity: quantity).lowercased()).font(.fell(17).smallCaps())
+                .underline(chosen == item)
             Text("\(item.weight * quantity)").gridColumnAlignment(.trailing).monospacedDigit().opacity(0.6)
         }
         .font(.fell(17))
+        .contentShape(Rectangle())
+        .onTapGesture { chosen = chosen == item ? nil : item }
+    }
+
+    @ViewBuilder
+    private func actions(_ item: Item, have: Int, _ e: Expedition) -> some View {
+        let free = e.isFree && e.visit == nil && e.mount == nil
+        let room = min(e.room(for: item), have)
+        HStack(spacing: 10) {
+            if Expedition.isUsable(item) {
+                Button("Use") { model.use(item) }
+                    .disabled(!e.isFree || e.visit != nil)
+            }
+            if room > 0 && free {
+                Stepper("\(count)", value: $count, in: 1...room)
+                    .font(.fell(16))
+                    .fixedSize()
+                Button("Drop") {
+                    model.drop(item, quantity: count)
+                    chosen = nil
+                }
+            } else if free {
+                Text(e.site == nil ? "Something else lies here." : "Not here.").font(.fell(14, italic: true)).opacity(0.7)
+            }
+        }
+        .buttonStyle(.bordered)
+        .tint(.ink)
+        .font(.fell(16))
+        .padding(.vertical, 2)
+    }
+
+    private func stat(_ label: String, _ value: Int) -> some View {
+        HStack(spacing: 4) {
+            oldVoice(label + "=", size: 14)
+            Text("\(value)").font(.fell(15)).monospacedDigit()
+        }
     }
 }
 

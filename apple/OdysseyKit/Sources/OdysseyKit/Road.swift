@@ -99,6 +99,7 @@ extension Expedition {
         guard ahead != cell, ahead.isOnMap, island.site(ahead) == nil, island.obstacles[ahead] == nil,
               let obstacle = Obstacle.across(island.terrain(ahead), rng: &rng) else { return }
         island.bar(ahead, with: obstacle)
+        seen.insert(ahead)
         visit = Visit(cell: ahead, stage: .obstacle(obstacle))
     }
 
@@ -195,7 +196,7 @@ extension Expedition {
             v.stage = .finished
 
         default:
-            break
+            useMagic(action, in: &v)
         }
     }
 
@@ -255,6 +256,11 @@ extension Expedition {
                 return
             }
         }
+    }
+
+    /// For looking at things: something lying where the party stands.
+    public mutating func rehearseLying(_ item: Item, _ quantity: Int) {
+        island.lay(item, quantity, in: cell)
     }
 
     /// For looking at things: every site sealed, and the party just south of the first

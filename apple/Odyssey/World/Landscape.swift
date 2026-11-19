@@ -5,6 +5,7 @@ import simd
 enum WorldScale {
     static let metresPerPixel: Float = 2
     static let margin = 60.0                    // map pixels of open sea around the island
+    static let mapMargin = 10.0                 // ...and how much of it the inset map shows
 
     static func world(x: Double, y: Double) -> SIMD2<Float> {
         [Float(x - Island.width / 2) * metresPerPixel, Float(y - Island.height / 2) * metresPerPixel]

@@ -45,13 +45,26 @@ struct HUD: View {
                             }
                         } else {
                             oldVoice(model.report)
+                            if model.lyingHere != nil && model.mount == nil {
+                                Button("Pick it up") { model.get() }
+                                    .font(.fell(16))
+                                    .buttonStyle(.borderedProminent)
+                                    .tint(.ink.opacity(0.85))
+                            }
+                        }
+                        if let mount = model.mount {
+                            Text(mount == .rug ? "Aloft on the flying rug. R to come down." : "On horseback. R to dismount.")
+                                .font(.fell(14, italic: true)).opacity(0.7)
                         }
                     }
                     .frame(maxWidth: 440, alignment: .leading)
                     .animation(.easeInOut(duration: 0.25), value: model.report)
                 }
                 Spacer()
-                Compass(yaw: model.cameraYaw)
+                VStack(alignment: .trailing, spacing: 10) {
+                    Compass(yaw: model.cameraYaw)
+                    MapView(model: model)
+                }
             }
             if let toast = model.toast {
                 oldVoice(toast, size: 22)
@@ -66,7 +79,7 @@ struct HUD: View {
                 #if os(iOS)
                 Joystick { model.stick = $0 }
                 #else
-                Text("WASD or arrows to walk · L to look · I for inventory · drag to turn · pinch or ± to zoom")
+                Text("WASD or arrows to walk · L look · G get · R ride · I inventory · drag to turn · pinch or ± to zoom")
                     .font(.fell(13, italic: true))
                     .foregroundStyle(.white.opacity(0.85))
                     .shadow(radius: 2)
@@ -82,6 +95,12 @@ struct HUD: View {
                         .font(.fell(18))
                         .buttonStyle(.borderedProminent)
                         .tint(.ink.opacity(0.8))
+                    if model.mount != nil || (model.expedition?.party.inventory[Item(20)] ?? 0) > 0 {
+                        Button(model.mount == nil ? "Ride" : "Halt") { model.rideOrHalt() }
+                            .font(.fell(18))
+                            .buttonStyle(.borderedProminent)
+                            .tint(.ink.opacity(0.8))
+                    }
                     #endif
                     if let party = model.expedition?.party {
                         Scroll {

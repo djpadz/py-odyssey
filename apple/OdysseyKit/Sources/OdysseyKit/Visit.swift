@@ -19,6 +19,10 @@ public enum Action: Hashable, Sendable {
     case requestAid             // R: of the wizard
     case beFriendly             // to the warriors
     case wait                   // W: ...or wait cautiously
+    case increaseSpeed          // 1-3: what magic may do
+    case increaseCharisma
+    case increaseWisdom
+    case saveIt                 // 4
 }
 
 /// A visit to a temple, ruin, castle, tomb or hut (lines 9000-9915), with the
@@ -44,6 +48,9 @@ public struct Visit: Sendable {
         case warriors
         case trapped(Trap, men: Int)
         case obstacle(Obstacle)
+        // Magic (Commands.swift).
+        case amulet
+        case charm(Item)                    // the lamp, scepter, wand or staff
     }
 
     /// Where this happens: a site, or nil on the road.
@@ -96,6 +103,8 @@ public struct Visit: Sendable {
         case .warriors: "DO YOU WANT TO ATTACK, BE FRIENDLY, IGNORE THEM, OR WAIT CAUTIOUSLY?"
         case let .trapped(trap, n): "\(n) \(trap.words). WHAT DO YOU WANT TO DO?"
         case let .obstacle(obstacle): "\(obstacle.words) WHAT DO YOU WANT TO DO?"
+        case .amulet: "THE AMULET HAS THE POWER TO HEAL WOUNDS AND RESTORE STRENGTH. IT CAN BE USED ONLY ONCE. SHALL WE USE IT NOW (Y/N)?"
+        case .charm: "YOU MAY: 1) INCREASE SPEED 2) INCREASE CHARISMA 3) INCREASE WISDOM 4) SAVE IT. WHICH?"
         }
     }
 
@@ -118,6 +127,8 @@ public struct Visit: Sendable {
         case .warriors: [.attack, .beFriendly, .ignore, .wait]
         case .trapped: [.carryOn]
         case .obstacle: [.leave]
+        case .amulet: [.accept, .decline]
+        case .charm: [.increaseSpeed, .increaseCharisma, .increaseWisdom, .saveIt]
         }
     }
 

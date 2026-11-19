@@ -3,12 +3,14 @@ public struct Party: Sendable {
     public var men = 10
     /// What the party carries, food and quadroons included (the original's BG/BQ).
     public var inventory: [Item: Int]
-    public let charisma: Int
+    public var charisma: Int
     public let dexterity: Int
     public var strength: Int
-    public let wisdom: Int
+    /// The strength rolled at the start, which the amulet restores (Z20).
+    public let rolledStrength: Int
+    public var wisdom: Int
     public let morale: Int
-    public let speed: Int
+    public var speed: Int
     public var experience = 10
     /// Good above zero, evil below (AL).
     public var alignment = 0
@@ -20,6 +22,7 @@ public struct Party: Sendable {
         morale = 5 + rng.rnd(5)
         inventory = [.foodPack: 15, .quadroon: 900 + rng.rnd(300)]
         strength = rng.rnd(8) + 3
+        rolledStrength = strength
         speed = rng.rnd(4) + 2
     }
 
@@ -69,6 +72,10 @@ public struct Expedition: Sendable {
     var roadEvents = true
     /// An obstacle the player turned away from, so bumping it again stays quiet.
     var passedObstacle: Cell?
+    /// On horseback or the flying rug, if either.
+    public internal(set) var mount: Mount?
+    /// Sites the party has seen, and obstacles it has met: what the map shows.
+    public internal(set) var seen: Set<Cell> = []
 
     public init(seed: UInt64) {
         self.seed = seed
@@ -77,6 +84,7 @@ public struct Expedition: Sendable {
         party = Party(rng: &rng)
         self.rng = rng
         (x, y) = island.start
+        lookAround()
     }
 
     public var cell: Cell { Cell(x: x, y: y) }
@@ -111,6 +119,15 @@ public struct Expedition: Sendable {
         return news
     }
 
+    /// Pace in map pixels per second. The hills and bogs slow the party on foot.
+    public func pace() -> Double {
+        switch mount {
+        case .horses: 22
+        case .rug: 30
+        case nil: Expedition.pace(terrain)
+        }
+    }
+
     /// Walking pace in map pixels per second; the hills and bogs slow the party.
     public static func pace(_ terrain: Terrain) -> Double {
         switch terrain {
@@ -124,25 +141,46 @@ public struct Expedition: Sendable {
     /// Walk in direction (dx, dy) (map axes, roughly unit length) for dt seconds.
     /// The men won't wade into the sea, so the party slides along the shore; walking
     /// straight at an obstacle stops and says what is in the way.
+    ///
+    /// Mounted, the party goes as the original's riding loop (120-130) does: no turns
+    /// pass, so no rations or encounters, and sites wait until it halts. Riding into
+    /// the sea drowns two horses; the rug flies over anything.
     /// Returns true if the party moved.
     @discardableResult
     public mutating func walk(dx: Double, dy: Double, dt: Double) -> Bool {
         guard !isLost, visit?.holdsParty != true, market == nil else { return false }
         let before = cell
-        let step = Expedition.pace(terrain) * dt
+        let step = pace() * dt
         var turnsWalked = 0, moved = false
         for (i, (mx, my)) in [(dx, dy), (dx, 0), (0, dy)].enumerated() where mx != 0 || my != 0 {
             let nx = x + mx * step, ny = y + my * step
             let next = Cell(x: nx, y: ny)
-            if island.terrain(next) == .ocean { continue }
-            if next != cell, let obstacle = island.obstacles[next] {
-                if i == 0 && visit == nil && next != passedObstacle {
-                    visit = Visit(cell: next, stage: .obstacle(obstacle))
+            if mount == .rug {
+                guard (1...Island.width - 1).contains(nx), (1...Island.height - 1).contains(ny) else { continue }
+                x = nx
+                y = ny
+                moved = true
+                break
+            }
+            if island.terrain(next) == .ocean {
+                if mount == .horses && i == 0 {
+                    drownHorses()
                     return false
                 }
                 continue
             }
-            walked += ((nx - x) * (nx - x) + (ny - y) * (ny - y)).squareRoot()
+            if next != cell, let obstacle = island.obstacles[next] {
+                if mount != nil { continue }
+                if i == 0 && visit == nil && next != passedObstacle {
+                    visit = Visit(cell: next, stage: .obstacle(obstacle))
+                    seen.insert(next)
+                    return false
+                }
+                continue
+            }
+            if mount == nil {
+                walked += ((nx - x) * (nx - x) + (ny - y) * (ny - y)).squareRoot()
+            }
             x = nx
             y = ny
             while walked >= Expedition.turnLength {
@@ -155,7 +193,8 @@ public struct Expedition: Sendable {
         if cell != before {
             visit = nil                   // walked away from a door
             passedObstacle = nil
-            arrive()
+            lookAround()
+            if mount == nil { arrive() }
         }
         for _ in 0..<turnsWalked {
             passTurn(heading: (dx, dy))
@@ -163,11 +202,21 @@ public struct Expedition: Sendable {
         return moved
     }
 
-    /// A turn on the road: rations (602), then perhaps an event (726).
+    /// A turn on the road: rations (602), perhaps something lying about (320), then
+    /// perhaps an event (726).
     mutating func passTurn(heading: (dx: Double, dy: Double) = (0, 0)) {
         eat()
         if roadEvents && !isLost && visit == nil && market == nil {
+            turnUpSomething()
             roadEvent(heading: heading)
+        }
+    }
+
+    /// Remember the sites in sight (the original draws them on its map, line 340).
+    mutating func lookAround() {
+        for (_, dc, dr) in Island.compass + [("", 0, 0)] {
+            let c = Cell(col: cell.col + dc, row: cell.row + dr)
+            if island.site(c) != nil { seen.insert(c) }
         }
     }
 

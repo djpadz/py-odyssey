@@ -84,6 +84,10 @@ struct IslandView: View {
             guard down else { return .ignored }
             switch press.characters.lowercased() {
             case "l" where model.visit == nil: model.look()
+            case "g" where model.visit == nil: model.get()
+            case "r" where model.visit == nil: model.rideOrHalt()
+            case "h" where model.mount != nil: model.rideOrHalt()
+            case "c": model.showingInventory.toggle()
             case "m": model.enterMarket()
             case "i": model.showingInventory.toggle()
             case "=", "+": model.zoom(by: 1.15)

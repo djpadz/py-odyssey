@@ -22,6 +22,13 @@ final class GameModel {
     var inMarket: Bool { expedition?.market != nil }
     var visit: Visit? { expedition?.visit }
     var siteSealed: Bool { expedition.map { $0.island.isSealed($0.cell) } ?? false }
+    /// What lies on the ground here, if anything.
+    var lyingHere: (item: Item, quantity: Int)? { expedition.flatMap { $0.island.lying($0.cell) } }
+    var mount: Mount? { expedition?.mount }
+    /// The ground as a picture, for the map.
+    var mapImage: CGImage? { world?.map }
+    /// Which way the party faces, radians clockwise from north.
+    var partyHeading: Float { -heading }
 
     @ObservationIgnored private(set) var world: World?
     @ObservationIgnored var camera: PerspectiveCamera?
@@ -36,6 +43,7 @@ final class GameModel {
     @ObservationIgnored private var cameraFocus: SIMD3<Float>?
     @ObservationIgnored private var heading: Float = 0
     @ObservationIgnored private var lastCell: Cell?
+    @ObservationIgnored private var lastLying = 0
     @ObservationIgnored private var lookingUntil: Double = 0
     @ObservationIgnored private var toastUntil: Double = 0
     @ObservationIgnored private var clock: Double = 0
@@ -54,7 +62,7 @@ final class GameModel {
                 lastCell = nil
                 cameraFocus = nil
                 toast = nil
-                showingInventory = false
+                showingInventory = meeting?.lowercased() == "inventory"
                 phase = .playing
             } catch {
                 loadError = error.localizedDescription
@@ -76,6 +84,19 @@ final class GameModel {
         case "WARLOCK": e.rehearse(.wizard(good: false))
         case "WARRIORS": e.rehearse(.warriors)
         case "CHEST": e.rehearse(.chest)
+        case "HORSES":
+            e.party.inventory[Item(20)] = 10
+            _ = e.ride()
+        case "RUG":
+            e.party.inventory[Item(45)] = 1
+            e.use(Item(45))
+        case "STAFF":
+            e.party.inventory[Item(47)] = 1
+            e.party.wisdom = 9                   // so it doesn't blow up
+            e.use(Item(47))
+        case "TORCHES": e.rehearseLying(Item(33), 4)
+        case "INVENTORY":
+            for id in [20, 39, 40, 45, 47] { e.party.inventory[Item(id)] = 1 }
         case "SEALED": e.sealEverySite()
         case "TEMPLE", "RUIN", "CASTLE", "TOMB", "HUT":
             e.sealEverySite(standingBy: Site.allCases.first { $0.distantName == name })
@@ -144,6 +165,47 @@ final class GameModel {
         lastCell = nil
     }
 
+    // MARK: Commands
+
+    /// G: pick up what lies here.
+    func get() {
+        guard var e = expedition, e.isFree else { return }
+        say(e.get())
+        expedition = e
+        lastCell = nil
+    }
+
+    func drop(_ item: Item, quantity: Int) {
+        guard var e = expedition else { return }
+        e.drop(item, quantity: quantity)
+        expedition = e
+        lastCell = nil
+    }
+
+    /// R mounts the horses; R or H again comes down (as does landing the rug).
+    func rideOrHalt() {
+        guard var e = expedition, e.isFree else { return }
+        say(e.mount == nil ? e.ride() : e.halt())
+        expedition = e
+        lastCell = nil
+    }
+
+    func use(_ item: Item) {
+        guard var e = expedition else { return }
+        held.removeAll()
+        showingInventory = false
+        e.use(item)
+        expedition = e
+        hear(e.takeNews(), lost: e.isLost)
+        lastCell = nil
+    }
+
+    private func say(_ words: String?) {
+        guard let words else { return }
+        toast = words
+        toastUntil = clock + 4
+    }
+
     /// Pass news on as a toast, or end the quest.
     private func hear(_ news: [String], lost: Bool) {
         guard let last = news.last else { return }
@@ -200,9 +262,12 @@ final class GameModel {
         }
         if toast != nil && clock > toastUntil { toast = nil }
 
-        if e.cell != lastCell {
+        // Something may turn up underfoot without the party leaving the cell.
+        let lying = e.island.lying(e.cell).map { $0.item.id * 1000 + $0.quantity } ?? 0
+        if e.cell != lastCell || lying != lastLying {
             lastCell = e.cell
-            siteHere = e.site
+            lastLying = lying
+            siteHere = e.mount == nil ? e.site : nil      // sites wait until the party halts
             report = e.describe()
         } else if lookingUntil > 0 && clock > lookingUntil {
             lookingUntil = 0
@@ -212,7 +277,7 @@ final class GameModel {
         let p2 = WorldScale.world(x: e.x, y: e.y)
         let ground = world.landscape
         let position = SIMD3<Float>(p2.x, max(ground.height(world: p2), 0.1), p2.y)
-        world.party.update(position: position, heading: heading, moving: moved, dt: dt) {
+        world.party.update(position: position, heading: heading, moving: moved, mount: e.mount, dt: dt) {
             max(ground.height(world: $0), 0.1)
         }
         world.sync(e)

@@ -44,6 +44,8 @@ struct VisitView: View {
         case .warriors: "Warriors"
         case .trapped: "Misfortune"
         case .obstacle: "The Way Is Barred"
+        case .amulet: "The Amulet"
+        case let .charm(item): "The \(item.name.capitalized)"
         default: visit.site.map { "The \($0.distantName.capitalized)" } ?? "On the Road"
         }
     }
@@ -110,6 +112,10 @@ struct VisitView: View {
         case .requestAid: ("Request aid", "r")
         case .beFriendly: ("Be friendly", "f")
         case .wait: ("Wait cautiously", "w")
+        case .increaseSpeed: ("Increase speed", "1")
+        case .increaseCharisma: ("Increase charisma", "2")
+        case .increaseWisdom: ("Increase wisdom", "3")
+        case .saveIt: ("Save it", "4")
         }
     }
 }

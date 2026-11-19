@@ -612,6 +612,17 @@ enum Bestiary {
         return Figure(root, width: 3)
     }
 
+    /// Something left lying on the ground.
+    static func sack() -> Entity {
+        let root = Entity()
+        _ = part(.generateSphere(radius: 0.5), [0.72, 0.6, 0.38], at: [0, 0.4, 0], scale: [1, 0.85, 1], in: root)
+        _ = part(.generateCone(height: 0.35, radius: 0.22), [0.72, 0.6, 0.38], at: [0, 0.85, 0], in: root)
+        _ = part(.generateCylinder(height: 0.08, radius: 0.12), [0.4, 0.25, 0.12], at: [0, 0.82, 0], in: root)
+        _ = part(.generateBox(width: 0.5, height: 0.4, depth: 0.1), [0.45, 0.31, 0.18], at: [0.6, 0.2, 0.1],
+                 turn: simd_quatf(angle: 0.6, axis: [0, 1, 0]), in: root)
+        return root
+    }
+
     static func chest() -> Entity {
         let root = Entity()
         let wood: SIMD3<Float> = [0.42, 0.27, 0.14], iron: SIMD3<Float> = [0.3, 0.3, 0.32]
