@@ -9,6 +9,10 @@ struct ContentView: View {
         ZStack {
             Color.black.ignoresSafeArea()
             switch model.phase {
+            case .playing where model.atSea:
+                SeaView(model: model)
+                    .ignoresSafeArea()
+                SeaHUD(model: model)
             case .playing:
                 IslandView(model: model)
                     .ignoresSafeArea()

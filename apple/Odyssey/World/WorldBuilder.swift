@@ -110,7 +110,7 @@ enum WorldBuilder {
         let sky = try await makeSky()
         root.addChild(sky.entity)
 
-        let ground = try await makeGround(blueprint)
+        let ground = try await makeGround(mesh: blueprint.mesh, texture: blueprint.texture)
         root.addChild(ground)
         root.addChild(try makeWater())
 
@@ -207,15 +207,17 @@ enum WorldBuilder {
         return e
     }
 
-    private static func makeGround(_ b: Blueprint) async throws -> ModelEntity {
+    /// The ground: a heightfield mesh wearing its painted texture.
+    static func makeGround(mesh m: Landscape.MeshData, texture t: (width: Int, height: Int, pixels: [UInt8])) async throws
+        -> ModelEntity {
         var d = MeshDescriptor(name: "ground")
-        d.positions = MeshBuffers.Positions(b.mesh.positions)
-        d.normals = MeshBuffers.Normals(b.mesh.normals)
-        d.textureCoordinates = MeshBuffers.TextureCoordinates(b.mesh.uvs)
-        d.primitives = .triangles(b.mesh.indices)
+        d.positions = MeshBuffers.Positions(m.positions)
+        d.normals = MeshBuffers.Normals(m.normals)
+        d.textureCoordinates = MeshBuffers.TextureCoordinates(m.uvs)
+        d.primitives = .triangles(m.indices)
         let mesh = try await MeshResource(from: [d])
 
-        let image = try cgImage(width: b.texture.width, height: b.texture.height, pixels: b.texture.pixels)
+        let image = try cgImage(width: t.width, height: t.height, pixels: t.pixels)
         let texture = try await TextureResource(image: image, options: .init(semantic: .color))
         var m = PhysicallyBasedMaterial()
         m.baseColor = .init(texture: .init(texture))
@@ -223,7 +225,7 @@ enum WorldBuilder {
         return ModelEntity(mesh: mesh, materials: [m])
     }
 
-    private static func makeWater() throws -> ModelEntity {
+    static func makeWater() throws -> ModelEntity {
         var m = PhysicallyBasedMaterial()
         m.baseColor = .init(tint: .init(red: 0.08, green: 0.32, blue: 0.45, alpha: 1))
         m.roughness = 0.12
@@ -235,7 +237,7 @@ enum WorldBuilder {
     }
 
     /// A gradient sky dome, which also lights the scene.
-    private static func makeSky() async throws -> (entity: Entity, environment: EnvironmentResource) {
+    static func makeSky() async throws -> (entity: Entity, environment: EnvironmentResource) {
         let w = 64, h = 32
         var px = [UInt8](repeating: 255, count: w * h * 4)
         for y in 0..<h {

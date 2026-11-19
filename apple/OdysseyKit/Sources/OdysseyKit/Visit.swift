@@ -51,6 +51,7 @@ public struct Visit: Sendable {
         // Magic (Commands.swift).
         case amulet
         case charm(Item)                    // the lamp, scepter, wand or staff
+        case readyToSail                    // 7050
     }
 
     /// Where this happens: a site, or nil on the road.
@@ -105,6 +106,7 @@ public struct Visit: Sendable {
         case let .obstacle(obstacle): "\(obstacle.words) WHAT DO YOU WANT TO DO?"
         case .amulet: "THE AMULET HAS THE POWER TO HEAL WOUNDS AND RESTORE STRENGTH. IT CAN BE USED ONLY ONCE. SHALL WE USE IT NOW (Y/N)?"
         case .charm: "YOU MAY: 1) INCREASE SPEED 2) INCREASE CHARISMA 3) INCREASE WISDOM 4) SAVE IT. WHICH?"
+        case .readyToSail: "YOU'RE READY TO LEAVE THIS ISLAND (Y/N)?"
         }
     }
 
@@ -129,6 +131,7 @@ public struct Visit: Sendable {
         case .obstacle: [.leave]
         case .amulet: [.accept, .decline]
         case .charm: [.increaseSpeed, .increaseCharisma, .increaseWisdom, .saveIt]
+        case .readyToSail: [.accept, .decline]
         }
     }
 

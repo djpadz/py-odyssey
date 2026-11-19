@@ -54,7 +54,7 @@ public struct Party: Sendable, Codable {
 /// but not a market or an encounter in progress (save when `isFree`), nor news.
 public struct Expedition: Sendable, Codable {
     private enum CodingKeys: String, CodingKey {
-        case seed, island, party, x, y, rng, walked, turns, hungryRations, mount, seen
+        case seed, island, party, x, y, rng, walked, turns, hungryRations, mount, seen, voyage, hasOrb
     }
 
     public let seed: UInt64
@@ -75,7 +75,8 @@ public struct Expedition: Sendable, Codable {
     var hungryRations = 0
     /// Things that happened that the player should hear about, oldest first.
     public internal(set) var news: [String] = []
-    /// Whether anything can befall the party on the road (off for some tests).
+    /// Whether anything can befall the party on the road, or the ship at sea, wind
+    /// shifts included (off for some tests).
     var roadEvents = true
     /// An obstacle the player turned away from, so bumping it again stays quiet.
     var passedObstacle: Cell?
@@ -83,6 +84,10 @@ public struct Expedition: Sendable, Codable {
     public internal(set) var mount: Mount?
     /// Sites the party has seen, and obstacles it has met: what the map shows.
     public internal(set) var seen: Set<Cell> = []
+    /// At sea, once the ship has sailed (SEA APVENTURE).
+    public internal(set) var voyage: Voyage?
+    /// The High One's Orb (Z8).
+    public internal(set) var hasOrb = false
 
     /// After loading: step up to the site underfoot again, if the party was at one.
     public mutating func resume() {
@@ -161,7 +166,7 @@ public struct Expedition: Sendable, Codable {
     /// Returns true if the party moved.
     @discardableResult
     public mutating func walk(dx: Double, dy: Double, dt: Double) -> Bool {
-        guard !isLost, visit?.holdsParty != true, market == nil else { return false }
+        guard !isLost, voyage == nil, visit?.holdsParty != true, market == nil else { return false }
         let before = cell
         let step = pace() * dt
         var turnsWalked = 0, moved = false

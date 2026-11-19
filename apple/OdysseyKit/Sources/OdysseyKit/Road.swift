@@ -258,6 +258,16 @@ extension Expedition {
         }
     }
 
+    /// For looking at things: at sea, with something going on.
+    public mutating func rehearseVoyage(_ happening: Happening? = nil, question: SeaQuestion? = nil,
+                                        said: [String] = []) {
+        voyage = Voyage()
+        voyage?.happening = happening
+        voyage?.question = question
+        voyage?.said = said
+        if happening != nil || question != nil { voyage?.anchored = true }
+    }
+
     /// For looking at things: something lying where the party stands.
     public mutating func rehearseLying(_ item: Item, _ quantity: Int) {
         island.lay(item, quantity, in: cell)

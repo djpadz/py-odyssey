@@ -1,5 +1,5 @@
 /// The original's twenty monsters (MN$). The first ten can be bargained with.
-public struct Monster: Hashable, Sendable {
+public struct Monster: Hashable, Sendable, Codable {
     public let kind: Int                     // 1...20, the original's MT
 
     private static let names = [

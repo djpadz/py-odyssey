@@ -27,10 +27,15 @@ final class GameModel {
     var mount: Mount? { expedition?.mount }
     /// The ground as a picture, for the map.
     var mapImage: CGImage? { world?.map }
+    var voyage: Voyage? { expedition?.voyage }
+    var atSea: Bool { expedition?.voyage != nil }
+    /// The painted sea chart, for the map at sea.
+    var chartImage: CGImage? { seaWorld?.map }
     /// Which way the party faces, radians clockwise from north.
     var partyHeading: Float { -heading }
 
     @ObservationIgnored private(set) var world: World?
+    @ObservationIgnored private(set) var seaWorld: SeaWorld?
     @ObservationIgnored var camera: PerspectiveCamera?
     @ObservationIgnored var updates: EventSubscription?
 
@@ -47,6 +52,7 @@ final class GameModel {
     @ObservationIgnored private var lookingUntil: Double = 0
     @ObservationIgnored private var toastUntil: Double = 0
     @ObservationIgnored private var clock: Double = 0
+    @ObservationIgnored private var nextSave: Double = 0
 
     /// Start a quest. One started from the command line (`--quest`) is for looking at
     /// things, and doesn't save over the real one.
@@ -80,7 +86,14 @@ final class GameModel {
         if !saves { heading = 0 }
         Task {
             do {
-                world = try await WorldBuilder.build(expedition)
+                if expedition.voyage != nil {
+                    seaWorld = try await SeaWorld.build(seed: expedition.seed)
+                    world = nil
+                    cameraDistance = 70
+                } else {
+                    world = try await WorldBuilder.build(expedition)
+                    seaWorld = nil
+                }
                 lastCell = nil
                 cameraFocus = nil
                 toast = nil
@@ -155,6 +168,19 @@ final class GameModel {
             e.party.wisdom = 9                   // so it doesn't blow up
             e.use(Item(47))
         case "TORCHES": e.rehearseLying(Item(33), 4)
+        case "SEA": e.rehearseVoyage()
+        case "SHIPS": e.rehearseVoyage(.ships)
+        case "PIRATES": e.rehearseVoyage(.pirates)
+        case "OCTOPUS": e.rehearseVoyage(.seaMonster(.octopus))
+        case "SERPENT": e.rehearseVoyage(.seaMonster(.serpent))
+        case "ARGORION": e.rehearseVoyage(.argorion)
+        case "FLYERS": e.rehearseVoyage(.flyers(Monster(kind: 18)))
+        case "FOG": e.rehearseVoyage(.fog)
+        case "STORM": e.rehearseVoyage(.storm)
+        case "WHIRLPOOL": e.rehearseVoyage(.whirlpool)
+        case "RAFT": e.rehearseVoyage(question: .raft(men: 4))
+        case "MERCHANTMEN": e.rehearseVoyage(question: .merchants)
+        case "TEMPLE": e.rehearseVoyage(.temple)
         case "INVENTORY":
             for id in [20, 39, 40, 45, 47] { e.party.inventory[Item(id)] = 1 }
         case "SEALED": e.sealEverySite()
@@ -177,6 +203,7 @@ final class GameModel {
         phase = .title
         expedition = nil
         world = nil
+        seaWorld = nil
     }
 
     /// The L command: also name the terrain round about.
@@ -223,6 +250,74 @@ final class GameModel {
         }
         hear(e.takeNews(), lost: e.isLost)
         lastCell = nil
+        if e.voyage != nil && seaWorld == nil { setSail() }
+    }
+
+    /// 7050: away from the island; the sea is charted while the men cast off.
+    private func setSail() {
+        guard let e = expedition else { return }
+        phase = .loading
+        Task {
+            do {
+                seaWorld = try await SeaWorld.build(seed: e.seed)
+                world = nil
+                cameraFocus = nil
+                cameraDistance = 70
+                showingInventory = false
+                save()
+                phase = .playing
+            } catch {
+                loadError = error.localizedDescription
+                phase = .title
+            }
+        }
+    }
+
+    // MARK: At sea
+
+    /// Do something to the quest at sea, and hear what came of it.
+    private func voyaging(_ change: (inout Expedition) -> Void) {
+        guard var e = expedition else { return }
+        change(&e)
+        expedition = e
+        if e.market != nil { showingInventory = false }
+        hear(e.takeNews(), lost: e.isLost)
+        save()
+    }
+
+    func order(_ c: SeaCommand) { voyaging { $0.command(c) } }
+    func answer(_ a: SeaAnswer) { voyaging { $0.answer(a) } }
+    func pay(_ amount: Int) { voyaging { $0.pay(amount) } }
+    func templeAttack() { voyaging { $0.templeAttack() } }
+    func templeLeave() { voyaging { $0.templeLeave() } }
+    func recoverShip() { voyaging { $0.recoverShip() } }
+    func returnToShip() { voyaging { $0.returnToShip() } }
+
+    func useAtSea(_ item: Item, offering: Bool = false) {
+        showingInventory = false
+        voyaging { $0.useAtSea(item, offering: offering) }
+    }
+
+    func putOver(_ item: Item, quantity: Int) {
+        showingInventory = false
+        voyaging { $0.putOver(item, quantity: quantity) }
+    }
+
+    /// An arrow key sets the sails for the point of the compass nearest that way from
+    /// the camera.
+    func sail(toward move: Move) {
+        let v: SIMD2<Float> = switch move {
+        case .forward: [0, 1]
+        case .back: [0, -1]
+        case .left: [-1, 0]
+        case .right: [1, 0]
+        }
+        let forward = SIMD2<Float>(-sin(cameraYaw), -cos(cameraYaw))
+        let right = SIMD2<Float>(cos(cameraYaw), -sin(cameraYaw))
+        let dir = forward * v.y + right * v.x                     // map axes: x east, y south
+        let bearing = atan2(dir.x, -dir.y)
+        let point = (Int((bearing / (.pi / 4)).rounded()) % 8 + 8) % 8
+        order(.setSails(point))
     }
 
     // MARK: Commands
@@ -293,9 +388,59 @@ final class GameModel {
 
     /// One frame of the world.
     func tick(dt: Float) {
-        guard phase == .playing, var e = expedition, let world else { return }
+        guard phase == .playing, let e = expedition else { return }
         clock += Double(dt)
         let dt = min(dt, 0.1)
+        if toast != nil && clock > toastUntil { toast = nil }
+        if e.voyage != nil {
+            tickSea(e, dt: dt)
+        } else if let world {
+            tickIsland(e, world: world, dt: dt)
+        }
+    }
+
+    /// A frame at sea: time passes, the ship sails, and the camera follows it.
+    private func tickSea(_ e: Expedition, dt: Float) {
+        guard let sea = seaWorld else { return }
+        var e = e
+        e.sail(dt: Double(dt))
+        expedition = e
+        let news = e.takeNews()
+        if !news.isEmpty {
+            hear(news, lost: e.isLost)
+            if e.isLost { return }
+        }
+        guard let v = e.voyage else { return }
+        if clock > nextSave {
+            save()
+            nextSave = clock + 5
+        }
+
+        // Between pixels the ship glides; it turns to the way it is going.
+        var x = Double(v.x), y = Double(v.y)
+        var yaw: Float?
+        if let d = e.drift {
+            let s = CompassPoint.step(d)
+            x += Double(s.dx) * v.progress
+            y += Double(s.dy) * v.progress
+            yaw = atan2(Float(-s.dx), Float(-s.dy))
+            heading = yaw!
+        }
+        let position = sea.place(x: x, y: y)
+        sea.ship.setSails(v.sails != nil && !v.sailsTorn)
+        sea.ship.update(position: position, heading: yaw, spin: v.happening == .whirlpool, dt: dt)
+        sea.whirl.isEnabled = v.happening == .whirlpool
+        sea.whirl.position = position
+        sea.whirl.orientation = simd_quatf(angle: Float(clock) * 1.5, axis: [0, 1, 0])
+        sea.cast.update(e, ship: position, dt: dt)
+        placeCamera(focus: position + [0, 4, 0], distance: cameraDistance, dt: dt) {
+            max(sea.seascape.height(world: $0), 0.1)
+        }
+    }
+
+    /// A frame on the island.
+    private func tickIsland(_ e: Expedition, world: World, dt: Float) {
+        var e = e
 
         // Input is relative to the camera: forward is away from it.
         var input = stick
@@ -321,7 +466,6 @@ final class GameModel {
                 if e.isLost { return }
             }
         }
-        if toast != nil && clock > toastUntil { toast = nil }
 
         // Something may turn up underfoot without the party leaving the cell.
         let lying = e.island.lying(e.cell).map { $0.item.id * 1000 + $0.quantity } ?? 0
@@ -355,11 +499,16 @@ final class GameModel {
             distance = 26
             cameraYaw += dt * 0.12
         }
+        placeCamera(focus: focus, distance: distance, dt: dt) { max(ground.height(world: $0), 0.1) }
+    }
+
+    /// The camera trails its focus, easing after it, never below the ground.
+    private func placeCamera(focus: SIMD3<Float>, distance: Float, dt: Float, ground: (SIMD2<Float>) -> Float) {
         let eased = cameraFocus.map { simd_mix($0, focus, SIMD3(repeating: min(1, dt * 3))) } ?? focus
         cameraFocus = eased
         let offset = SIMD3<Float>(sin(cameraYaw) * cos(cameraPitch), sin(cameraPitch), cos(cameraYaw) * cos(cameraPitch))
         var eye = eased + offset * distance
-        eye.y = max(eye.y, ground.height(world: [eye.x, eye.z]) + 3)
+        eye.y = max(eye.y, ground([eye.x, eye.z]) + 3)
         camera?.look(at: eased, from: eye, relativeTo: nil)
     }
 }

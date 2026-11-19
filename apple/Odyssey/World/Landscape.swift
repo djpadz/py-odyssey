@@ -140,11 +140,17 @@ struct Landscape: Sendable {
     }
 
     func meshData() -> MeshData {
+        Landscape.mesh(heights, columns: columns, rows: rows, originX: originX, originY: originY, step: Landscape.step)
+    }
+
+    /// A grid of heights (rows from the north, `step` map pixels apart from the origin) as a mesh.
+    static func mesh(_ heights: [Float], columns: Int, rows: Int, originX: Double, originY: Double,
+                     step: Double) -> MeshData {
         var m = MeshData()
-        let s = Float(Landscape.step) * WorldScale.metresPerPixel
+        let s = Float(step) * WorldScale.metresPerPixel
         for r in 0..<rows {
             for c in 0..<columns {
-                let x = originX + Double(c) * Landscape.step, y = originY + Double(r) * Landscape.step
+                let x = originX + Double(c) * step, y = originY + Double(r) * step
                 let p = WorldScale.world(x: x, y: y)
                 m.positions.append([p.x, heights[r * columns + c], p.y])
                 let hl = heights[r * columns + max(c - 1, 0)], hr = heights[r * columns + min(c + 1, columns - 1)]

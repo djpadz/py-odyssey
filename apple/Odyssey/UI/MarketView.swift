@@ -270,6 +270,34 @@ struct InventoryView: View {
 
     @ViewBuilder
     private func actions(_ item: Item, have: Int, _ e: Expedition) -> some View {
+        if e.voyage != nil {
+            seaActions(item, have: have)
+        } else {
+            islandActions(item, have: have, e)
+        }
+    }
+
+    /// At sea: use it, offer it, or put some over the side.
+    private func seaActions(_ item: Item, have: Int) -> some View {
+        HStack(spacing: 10) {
+            Button("Use") { model.useAtSea(item) }
+            Button("Offer") { model.useAtSea(item, offering: true) }
+            Stepper("\(count)", value: $count, in: 1...have)
+                .font(.fell(16))
+                .fixedSize()
+            Button("Put over") {
+                model.putOver(item, quantity: count)
+                chosen = nil
+            }
+        }
+        .buttonStyle(.bordered)
+        .tint(.ink)
+        .font(.fell(16))
+        .padding(.vertical, 2)
+    }
+
+    @ViewBuilder
+    private func islandActions(_ item: Item, have: Int, _ e: Expedition) -> some View {
         let free = e.isFree && e.visit == nil && e.mount == nil
         let room = min(e.room(for: item), have)
         HStack(spacing: 10) {

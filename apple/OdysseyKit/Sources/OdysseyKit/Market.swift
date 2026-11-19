@@ -12,6 +12,8 @@ public struct Market: Sendable {
     public private(set) var lots: [Lot]
     /// A caravan met on the road rather than a city's bazaar.
     public internal(set) var isCaravan = false
+    /// Merchantmen met at sea.
+    public internal(set) var isAtSea = false
 
     /// Stock a market (1500-1515): food always, the ship at the ship city, then
     /// whatever else the caravans brought in.
@@ -28,6 +30,20 @@ public struct Market: Sendable {
             lots.append(Lot(id: lots.count + 1, item: item, price: item.listPrice + rng.rnd(20), quantity: quantity))
         }
         self.lots = lots
+    }
+
+    /// The merchantmen's stock (1500-1515 of SEA APVENTURE): more food, and no
+    /// contracts or ships.
+    init(atSeaWith men: Int, rng: inout SeededRandom) {
+        var lots = [Lot(id: 1, item: .foodPack, price: 10 + rng.rnd(5), quantity: 15 + rng.rnd(30))]
+        for _ in 2...13 {
+            let m = rng.rnd(36) - 5
+            guard m >= 1, m != Item.contract.id, !lots.contains(where: { $0.item.id == m }) else { continue }
+            let item = Item(m)
+            lots.append(Lot(id: lots.count + 1, item: item, price: item.listPrice + rng.rnd(20), quantity: 5 + rng.rnd(20)))
+        }
+        self.lots = lots
+        isAtSea = true
     }
 
     public subscript(id: Int) -> Lot {

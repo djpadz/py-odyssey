@@ -9,7 +9,11 @@ public enum Mount: Sendable, Equatable, Codable {
 extension Expedition {
     /// Whether the party is free to do as it likes: not in the market, not caught up in
     /// something it must see through.
-    public var isFree: Bool { !isLost && market == nil && visit?.holdsParty != true }
+    public var isFree: Bool { !isLost && voyage == nil && market == nil && visit?.holdsParty != true }
+
+    /// Whether the quest can be saved as it stands: not haggling, and on the island not
+    /// in the middle of something (at sea everything saves).
+    public var isSettled: Bool { !isLost && market == nil && (voyage != nil || visit?.holdsParty != true) }
 
     // MARK: Things lying about
 
@@ -90,9 +94,9 @@ extension Expedition {
 
     // MARK: Using things
 
-    /// Whether an item can be used on the road (the ship waits for the sea).
+    /// Whether an item can be used on the road.
     public static func isUsable(_ item: Item) -> Bool {
-        item != .ship && item != .foodPack && item != .quadroon
+        item != .foodPack && item != .quadroon
     }
 
     /// 760-765, 8100-8180: use something on the road. Magic does what it does; anything
@@ -142,6 +146,8 @@ extension Expedition {
         case 45:
             mount = .rug                   // 8160: the rug isn't used up
             return
+        case 49:
+            useShip(&v)
         default:
             v.said = ["USING YOUR \(item.name) DIDN'T HAVE ANY USEFUL EFFECT."]
         }
@@ -155,7 +161,10 @@ extension Expedition {
             party.strength = party.rolledStrength           // 8105
             useUp(Item(39))
             v.stage = .finished
-        case (.amulet, .decline), (.charm, .saveIt):
+        case (.amulet, .decline), (.charm, .saveIt), (.readyToSail, .decline):
+            v.stage = .finished
+        case (.readyToSail, .accept):
+            embark()
             v.stage = .finished
         case let (.charm(item), .increaseSpeed), let (.charm(item), .increaseCharisma),
              let (.charm(item), .increaseWisdom):
