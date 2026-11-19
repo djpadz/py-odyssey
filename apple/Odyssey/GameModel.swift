@@ -521,7 +521,7 @@ final class GameModel {
             nextCreep = clock + 0.18
         }
         guard let c = expedition?.catacombs else { return }
-        w.update(c, hasOrb: e.hasOrb, dt: dt)
+        w.update(c, hasOrb: e.hasOrb, men: e.party.men, dt: dt)
         placeCamera(focus: CatacombWorld.place(Double(c.x), Double(c.y)), distance: min(cameraDistance, 30), dt: dt,
                     pitch: max(cameraPitch, 1.05)) { _ in 0 }
     }
@@ -529,7 +529,7 @@ final class GameModel {
     /// A frame on Lapour: the party walks up to wherever it has got to.
     private func tickFortress(_ e: Expedition, dt: Float) {
         guard let w = fortressWorld, let f = e.fortress else { return }
-        w.update(f, ended: false, dt: dt)
+        w.update(f, ended: false, men: e.party.men, dt: dt)
         placeCamera(focus: w.partyPosition + [0, 2, 0], distance: max(cameraDistance, 40), dt: dt) { _ in 0 }
     }
 
@@ -617,7 +617,8 @@ final class GameModel {
         let p2 = WorldScale.world(x: e.x, y: e.y)
         let ground = world.landscape
         let position = SIMD3<Float>(p2.x, max(ground.height(world: p2), 0.1), p2.y)
-        world.party.update(position: position, heading: heading, moving: moved, mount: e.mount, dt: dt) {
+        world.party.update(position: position, heading: heading, moving: moved, mount: e.mount,
+                           strength: e.party.men, dt: dt) {
             max(ground.height(world: $0), 0.1)
         }
         world.sync(e)

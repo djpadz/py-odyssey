@@ -3,10 +3,12 @@ import OdysseyKit
 import RealityKit
 import simd
 
-/// The adventurer, banner aloft, and a file of men behind; on horseback, or all
-/// aboard the flying rug.
+/// The adventurer, banner aloft, and a file of men behind, a figure for every three
+/// men (up to a dozen); on horseback, or all aboard the flying rug.
 @MainActor
 final class PartyFigure {
+    static let menPerFigure = 3
+    static let mostFigures = 12
     let root = Entity()
     private let leader: Entity
     private var men: [Entity] = []
@@ -21,7 +23,7 @@ final class PartyFigure {
     init() {
         leader = PartyFigure.figure(cloak: [0.62, 0.10, 0.10], banner: true)
         root.addChild(leader)
-        for i in 0..<4 {
+        for i in 0..<(PartyFigure.mostFigures - 1) {
             let man = PartyFigure.figure(cloak: i % 2 == 0 ? [0.42, 0.30, 0.18] : [0.30, 0.32, 0.22], banner: false)
             men.append(man)
             root.addChild(man)
@@ -111,25 +113,32 @@ final class PartyFigure {
         return e
     }
 
-    /// Place the party: `position` on the ground, `heading` the yaw it faces, `moving` whether it walked this frame.
-    func update(position: SIMD3<Float>, heading: Float, moving: Bool, mount: Mount?, dt: Float,
+    /// Place the party: `position` on the ground, `heading` the yaw it faces, `moving`
+    /// whether it walked this frame, `strength` how many men there are.
+    func update(position: SIMD3<Float>, heading: Float, moving: Bool, mount: Mount?, strength: Int, dt: Float,
                 ground: (SIMD2<Float>) -> Float) {
         let facing = simd_quatf(angle: heading, axis: [0, 1, 0])
+        let figures = min(max((strength + PartyFigure.menPerFigure - 1) / PartyFigure.menPerFigure, 1), PartyFigure.mostFigures)
+        let men = Array(self.men.prefix(figures - 1))
+        for (i, man) in self.men.enumerated() { man.isEnabled = i < men.count }
         rug.isEnabled = mount == .rug
-        for h in horses { h.isEnabled = mount == .horses }
+        for (i, h) in horses.enumerated() { h.isEnabled = mount == .horses && i <= men.count }
 
         // Aboard the rug, everyone sits together and it rises and floats.
         hover += ((mount == .rug ? 4.5 : 0) - hover) * min(1, dt * 2)
         if mount == .rug || hover > 0.05 {
             walkPhase += dt * 1.5
             let deck = position + [0, hover + sin(walkPhase) * 0.15 + 0.1, 0]
-            rug.position = deck
+            // Everyone sits in rows of three behind the leader; the rug is as long as it needs.
+            let rows = Float((men.count + 2) / 3)
+            let length = max(1, (rows * 0.9 + 1.6) / 3.4)
+            rug.scale = [1, 1, length]
+            rug.position = deck + facing.act([0, 0, (length - 1) * 1.7])
             rug.orientation = facing * simd_quatf(angle: sin(walkPhase * 0.8) * 0.04, axis: [0, 0, 1])
             leader.position = deck + facing.act([0, 0.05, -0.9])
             leader.orientation = facing
-            let seats: [SIMD3<Float>] = [[-0.7, 0.05, 0.2], [0.7, 0.05, 0.2], [-0.6, 0.05, 1.1], [0.6, 0.05, 1.1]]
-            for (man, seat) in zip(men, seats) {
-                man.position = deck + facing.act(seat)
+            for (i, man) in men.enumerated() {
+                man.position = deck + facing.act([Float(i % 3 - 1) * 0.8, 0.05, 0.2 + Float(i / 3) * 0.9])
                 man.orientation = facing
             }
             trail = []
@@ -149,7 +158,7 @@ final class PartyFigure {
 
         if trail.isEmpty || simd_distance(trail[0], position) > 0.25 {
             trail.insert(position, at: 0)
-            if trail.count > 80 { trail.removeLast() }
+            if trail.count > 140 { trail.removeLast() }
         }
         for (i, man) in men.enumerated() {
             let target = trail[min((i + 1) * (mount == .horses ? 10 : 7), trail.count - 1)]

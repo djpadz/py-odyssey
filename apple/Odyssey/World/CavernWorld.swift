@@ -50,7 +50,7 @@ final class CatacombWorld {
         [(Float(x) - 19.5) * square, 0, (Float(y) - 19.5) * square]
     }
 
-    func update(_ c: Catacombs, hasOrb: Bool, dt: Float) {
+    func update(_ c: Catacombs, hasOrb: Bool, men: Int, dt: Float) {
         clock += dt
         if c.walls != builtWalls || c.laid != builtLaid { rebuild(c) }
 
@@ -68,7 +68,7 @@ final class CatacombWorld {
             shown = target
         }
         let at = shown!
-        party.update(position: at, heading: heading, moving: moving, mount: nil, dt: dt) { _ in 0 }
+        party.update(position: at, heading: heading, moving: moving, mount: nil, strength: men, dt: dt) { _ in 0 }
 
         torch.isEnabled = c.light
         torch.position = at + [0, 4.5, 0]
@@ -258,7 +258,7 @@ final class FortressWorld {
         return [0, 0, f.blocked ? z + 7 : z - 5]
     }
 
-    func update(_ f: Fortress, ended: Bool, dt: Float) {
+    func update(_ f: Fortress, ended: Bool, men: Int, dt: Float) {
         for (i, e) in hazards.enumerated() {
             // Each shows once reached, and goes once passed.
             let reached = f.stage > i, passed = f.stage > i + 1 || (f.stage == i + 1 && !f.blocked) || ended
@@ -276,7 +276,7 @@ final class FortressWorld {
         } else {
             shown = target
         }
-        party.update(position: shown!, heading: heading, moving: moving, mount: nil, dt: dt) { _ in 0 }
+        party.update(position: shown!, heading: heading, moving: moving, mount: nil, strength: men, dt: dt) { _ in 0 }
     }
 
     var partyPosition: SIMD3<Float> { shown ?? [0, 0, FortressWorld.startZ] }
