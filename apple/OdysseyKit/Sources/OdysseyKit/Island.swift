@@ -122,6 +122,16 @@ public struct Island: Sendable {
         Site(rawValue: value(cell) % 100)
     }
 
+    /// A site whose entrance sealed behind the party (the original adds 100).
+    public func isSealed(_ cell: Cell) -> Bool {
+        site(cell) != nil && value(cell) % 1000 > 100
+    }
+
+    mutating func seal(_ cell: Cell) {
+        guard cell.isOnMap, !isSealed(cell) else { return }
+        lc[cell.index] += 100
+    }
+
     public var sites: [(cell: Cell, site: Site)] {
         allCells.compactMap { cell in site(cell).map { (cell, $0) } }
     }

@@ -5,9 +5,13 @@ public struct Party: Sendable {
     public var inventory: [Item: Int]
     public let charisma: Int
     public let dexterity: Int
-    public let strength: Int
+    public var strength: Int
     public let wisdom: Int
     public let morale: Int
+    public let speed: Int
+    public var experience = 10
+    /// Good above zero, evil below (AL).
+    public var alignment = 0
 
     public init(rng: inout SeededRandom) {
         charisma = rng.rnd(9) + 2
@@ -16,6 +20,7 @@ public struct Party: Sendable {
         morale = 5 + rng.rnd(5)
         inventory = [.foodPack: 15, .quadroon: 900 + rng.rnd(300)]
         strength = rng.rnd(8) + 3
+        speed = rng.rnd(4) + 2
     }
 
     public var foodPacks: Int {
@@ -43,11 +48,13 @@ public struct Party: Sendable {
 /// A quest in progress: the island, the party, and where the party stands.
 public struct Expedition: Sendable {
     public let seed: UInt64
-    public let island: Island
+    public internal(set) var island: Island
     public var party: Party
     public private(set) var x: Double
     public private(set) var y: Double
     public internal(set) var market: Market?
+    /// The site the party stands at, if it is dealing with one.
+    public internal(set) var visit: Visit?
     var rng: SeededRandom
 
     /// The original moves 3 pixels a turn; walking that far is one turn here.
@@ -57,7 +64,7 @@ public struct Expedition: Sendable {
     /// Rations missed in a row (Z6); after three, men start to starve.
     var hungryRations = 0
     /// Things that happened that the player should hear about, oldest first.
-    public private(set) var news: [String] = []
+    public internal(set) var news: [String] = []
 
     public init(seed: UInt64) {
         self.seed = seed
@@ -72,6 +79,8 @@ public struct Expedition: Sendable {
     public var terrain: Terrain { island.terrain(cell) }
     public var site: Site? { island.site(cell) }
     public var isLost: Bool { party.men <= 0 }
+
+    static let allLost = "I AM SORRY TO REPORT, MY LIEGE, THAT ALL THE MEN IN YOUR EXPEDITIONARY PARTY WERE LOST. BETTER LUCK NEXT TIME, SIRE."
 
     /// Line 609: how the larder looks.
     public var foodWarning: String? {
@@ -113,7 +122,14 @@ public struct Expedition: Sendable {
     /// Returns true if the party moved.
     @discardableResult
     public mutating func walk(dx: Double, dy: Double, dt: Double) -> Bool {
-        guard !isLost else { return false }
+        guard !isLost, !(visit?.isInside ?? false), market == nil else { return false }
+        let before = cell
+        defer {
+            if cell != before {
+                visit = nil               // walked away from a door
+                arrive()
+            }
+        }
         let step = Expedition.pace(terrain) * dt
         for (mx, my) in [(dx, dy), (dx, 0), (0, dy)] where mx != 0 || my != 0 {
             let nx = x + mx * step, ny = y + my * step
@@ -143,7 +159,7 @@ public struct Expedition: Sendable {
             party.men -= 1
             news.append("A MAN STARVED TODAY.")
             if isLost {
-                news.append("I AM SORRY TO REPORT, MY LIEGE, THAT ALL THE MEN IN YOUR EXPEDITIONARY PARTY WERE LOST. BETTER LUCK NEXT TIME, SIRE.")
+                news.append(Expedition.allLost)
             }
         }
     }

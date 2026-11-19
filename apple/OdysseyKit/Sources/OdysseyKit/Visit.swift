@@ -1,0 +1,382 @@
+/// What the player can do at a site. Each matches one of the original's keys.
+public enum Action: Hashable, Sendable {
+    case use(Item)              // U: the right key or tool opens the way, or saves trapped men
+    case enter                  // E: into a hut
+    case leave                  // L
+    case search                 // search further
+    case take                   // G: take what is on the altar
+    case leaveIt                // ...or leave it
+    case open                   // O: open a chest
+    case goOn                   // ...or go on
+    case attack                 // A
+    case slipAway               // leave the monsters be
+    case offerGold, offerFood   // O, then G or F
+    case fight, run             // F or R, each round
+    case accept, decline        // Y/N to the hut's offer
+    case carryOn                // abandon the men in the pit
+}
+
+/// A visit to a temple, ruin, castle, tomb or hut (lines 9000-9915), with the
+/// monsters, chests and pits found inside.
+public struct Visit: Sendable {
+    public enum Stage: Sendable, Equatable {
+        case door                           // locked; find the right thing to use
+        case hutDoor                        // enter or leave?
+        case hutOffer(Item, price: Int)
+        case searching                      // search further or leave?
+        case altar(Item)
+        case chest
+        case pit(trapped: Int)
+        case monstersAhead(Monster)
+        case offering(Monster)
+        case battle(Battle)
+        case spoils                         // the beaten monsters' chest
+        case finished                       // nothing more here: leave
+    }
+
+    public let site: Site
+    public let cell: Cell
+    public internal(set) var stage: Stage
+    /// What has just happened, oldest first.
+    public internal(set) var said: [String]
+    /// Searches left once inside (Z1); nil until the party gets in.
+    var searchesLeft: Int?
+    /// The items that open this site's door (U1-U3).
+    let opens: Set<Item>
+
+    public var isInside: Bool { searchesLeft != nil }
+
+    /// Whether the player may use something they carry here.
+    public var canUseItems: Bool {
+        switch stage {
+        case .door, .pit: true
+        default: false
+        }
+    }
+
+    /// The question put to the player now.
+    public var question: String {
+        switch stage {
+        case .door: "WHAT WILL YOU DO?"
+        case .hutDoor: "DO YOU WISH TO ENTER OR LEAVE?"
+        case let .hutOffer(_, price): "FOR \(price) GOLD PIECES. INTERESTED?"
+        case .searching: "YOU HAVEN'T FOUND ANYTHING. DO YOU WANT TO SEARCH FURTHER OR LEAVE NOW?"
+        case let .altar(item): "YOU'VE COME INTO A ROOM WITH AN ALTAR IN IT. ON THE ALTAR IS A \(item.name). DO YOU WANT TO GET IT OR LEAVE IT?"
+        case .chest: "YOU'VE FOUND A LARGE WOODEN CHEST. DO YOU WANT TO OPEN IT OR GO ON?"
+        case let .pit(n): "\(n) OF YOUR MEN FELL INTO THE PIT. WHAT DO YOU WANT TO DO?"
+        case let .monstersAhead(m): "YOU CAN SEE SOME \(m.name) AHEAD. THEY HAVEN'T SEEN YOU YET. DO YOU WANT TO ATTACK, LEAVE, OR OFFER SOMETHING?"
+        case .offering: "DO YOU WANT TO OFFER GOLD OR FOOD?"
+        case .battle: "WILL YOU RUN OR FIGHT?"
+        case .spoils: "IT LOOKS LIKE THEY HAVE A CHEST OF SOME SORT. WILL YOU OPEN IT OR LEAVE?"
+        case .finished: "IT LOOKS LIKE THERE IS NOTHING ELSE IN HERE. YOU'D BETTER LEAVE NOW."
+        }
+    }
+
+    /// The choices on offer, besides using something (see `canUseItems`).
+    public var actions: [Action] {
+        switch stage {
+        case .door: [.leave]
+        case .hutDoor: [.enter, .leave]
+        case .hutOffer: [.accept, .decline]
+        case .searching: [.search, .leave]
+        case .altar: [.take, .leaveIt]
+        case .chest, .spoils: [.open, .goOn]
+        case .pit: [.carryOn]
+        case .monstersAhead: [.attack, .slipAway, .offerGold, .offerFood]
+        case .offering: [.offerGold, .offerFood]
+        case .battle: [.fight, .run]
+        case .finished: [.leave]
+        }
+    }
+
+    init(site: Site, cell: Cell) {
+        self.site = site
+        self.cell = cell
+        said = [site.entrance]
+        stage = site == .hut ? .hutDoor : .door
+        opens = switch site {
+        case .temple: [Item(2)]                     // lock pick
+        case .ruin: [Item(11), Item(33)]            // oil lamp, torch
+        case .castle: [Item(37), Item(2)]           // brass key, lock pick
+        case .tomb: [Item(35), Item(8)]             // crowbar, shovel
+        case .hut, .city: []
+        }
+    }
+}
+
+extension Expedition {
+    /// Step up to the site in this cell, if there is one still open.
+    mutating func arrive() {
+        guard let site, site != .city, !island.isSealed(cell) else { return }
+        visit = Visit(site: site, cell: cell)
+    }
+
+
+    /// Do something at the site.
+    public mutating func act(_ action: Action) {
+        guard var v = visit else { return }
+        v.said = []
+        perform(action, in: &v)
+        if party.men <= 0 && v.stage != .finished { lose(&v) }
+        visit = v
+        if v.stage == .finished && action == .leave {
+            visit = nil
+            if v.isInside {
+                island.seal(v.cell)
+                news.append("THE ENTRANCE SEALED BEHIND YOU AS YOU LEFT.")
+            }
+        }
+    }
+
+    private mutating func perform(_ action: Action, in v: inout Visit) {
+        switch (v.stage, action) {
+
+        // The door (9010-9020, 760, 8000, 9700).
+        case let (.door, .use(item)):
+            if v.opens.contains(item) {
+                v.said = ["YOU GOT IN. IT LOOKS DESERTED."]
+                v.searchesLeft = 6
+                searchOn(&v)
+            } else {
+                v.said = ["USING YOUR \(item.name) DIDN'T HAVE ANY USEFUL EFFECT."]
+            }
+        case (.door, .leave), (.hutDoor, .leave):
+            v.stage = .finished
+
+        // Huts (9500-9570): a witch, a hermit or a monk with something to sell.
+        case (.hutDoor, .enter):
+            v.searchesLeft = 0
+            let price = 300 + rng.rnd(300)
+            let item: Item
+            switch rng.rnd(3) {
+            case 0:
+                v.said = ["THE HUT IS INHABITED BY AN OLD CRONE WHO CLAIMS TO BE A POWERFUL WITCH. SHE HAS OFFERED TO SELL YOU A MAGIC LAMP"]
+                item = rng.rnd(2) == 1 ? Item(41) : Item(11)
+            case 1:
+                v.said = ["A FILTHY HERMIT LIVES IN THE HUT. HE CLAIMS TO BE AN ORACLE. HE OFFERS TO SELL YOU A POWERFUL MAGIC POTION"]
+                let j = rng.rnd(4)
+                item = j > 1 ? Item(41 + j) : Item(13)
+            default:
+                v.said = ["A MONK LIVES IN THE HUT. HE CLAIMS TO HAVE A BOOK OR SCROLL CONTAINING ANCIENT AND MIGHTY SPELLS THAT HE WILL SELL YOU"]
+                item = rng.rnd(2) == 1 ? Item(40) : Item(12)
+            }
+            v.stage = .hutOffer(item, price: price)
+        case let (.hutOffer(item, price), .accept):
+            let gold = party.gold
+            if gold >= price {
+                party.gold -= price
+                gain(item)
+                v.said = ["YOU NOW HAVE THE \(item.name)."]
+            } else if gold < price / 2 {
+                v.said = ["YOU ONLY HAVE \(gold) GOLD PIECES! I THINK YOU HAD BETTER LEAVE."]
+            } else {
+                v.said = ["YOU ONLY HAVE \(gold) GOLD PIECES.", "I GUESS THAT WILL DO."]
+                party.gold = 0
+                gain(item)
+            }
+            v.stage = .finished
+        case (.hutOffer, .decline):
+            v.stage = .finished
+
+        // Searching (9710-9762).
+        case (.searching, .search):
+            if rng.rnd(2) == 1 {
+                searchOn(&v)
+                return
+            }
+            switch rng.rnd(4) {
+            case 0: v.stage = .altar(Item(39 + rng.rnd(9)))
+            case 1: meetMonsters(&v)
+            case 2: v.stage = .chest
+            default: pitTrap(&v)
+            }
+        case (.searching, .leave):
+            if rng.rnd(3) != 0 {
+                v.stage = .finished
+            } else {
+                pitTrap(&v)
+            }
+        case let (.altar(item), .take):
+            gain(item)
+            v.said = ["OK, YOU GOT THE \(item.name)."]
+            v.stage = .finished
+        case (.altar, .leaveIt), (.chest, .goOn):
+            searchOn(&v)
+        case (.chest, .open):
+            if rng.rnd(4) == 0 {
+                if rng.rnd(2) == 1 {
+                    v.said = ["A POISONED NEEDLE WAS EJECTED FROM THE LOCK. THE MAN OPENING IT WAS KILLED."]
+                    party.men -= 1
+                } else {
+                    v.said = ["WHEN IT WAS OPENED, THE CHEST RELEASED A CLOUD OF POISONOUS VAPOR. NO ONE WAS KILLED, BUT YOU WERE ALL WEAKENED."]
+                    searchOn(&v)
+                    return
+                }
+            }
+            let gold = 500 + rng.rnd(500)
+            v.said.append("CONGRATULATIONS! THE CHEST CONTAINED \(gold) GOLD QUADROONS.")
+            party.gold += gold
+            v.stage = .finished
+
+        // The pit (9760-9762, 8000-8017): a rope, a horse or a net pulls men out.
+        case let (.pit(trapped), .use(item)):
+            if [7, 19, 18].contains(item.id) {
+                let saved = min(rng.rnd(trapped) + 2, trapped)
+                party.men += saved
+                v.said = ["CONGRATULATIONS! YOU SAVED \(saved) MEN WITH YOUR \(item.name)."]
+                if trapped > saved { v.said.append("THE OTHER \(trapped - saved) DIED, HOWEVER.") }
+                searchOn(&v)
+            } else {
+                v.said = ["USING YOUR \(item.name) DIDN'T HAVE ANY USEFUL EFFECT."]
+            }
+        case (.pit, .carryOn):
+            searchOn(&v)
+
+        // Monsters (1200-1370).
+        case let (.monstersAhead(m), .attack):
+            startBattle(m, theyWereSurprised: true, surprise: rng.rnd(3), in: &v)
+        case let (.monstersAhead(m), .slipAway):
+            if rng.rnd(4) != 0 {
+                searchOn(&v)
+            } else {
+                v.said = ["YOU MADE SOME NOISE. THEY'RE ATTACKING!"]
+                startBattle(m, theyWereSurprised: false, surprise: 0, in: &v)
+            }
+        case let (.monstersAhead(m), .offerGold), let (.offering(m), .offerGold):
+            if !m.reasons {
+                v.said = ["THEY ARE TOO STUPID TO BE INTERESTED IN TREASURE. THEY ARE ATTACKING."]
+                startBattle(m, theyWereSurprised: false, surprise: 1, in: &v)
+            } else if party.alignment < 0 {
+                let joined = party.charisma / 2 + rng.rnd(3)
+                party.men += joined
+                party.gold = max(party.gold - 50, 0)
+                v.said = ["\(joined) OF THEM ACCEPTED YOUR OFFER. FINDING YOUR GROUP TO BE KINDRED SOULS, THEY WILL JOIN IN YOUR QUEST."]
+                searchOn(&v)
+            } else {
+                party.gold = max(party.gold - 50, 0)
+                v.said = ["THEY TOOK THE GOLD AND ARE ATTACKING ANYWAY!"]
+                startBattle(m, theyWereSurprised: false, surprise: 1, in: &v)
+            }
+        case let (.monstersAhead(m), .offerFood), let (.offering(m), .offerFood):
+            if m.reasons {
+                v.said = ["THEY WERE ENRAGED BY YOUR INSULTING OFFER AND ARE ATTACKING!"]
+                startBattle(m, theyWereSurprised: false, surprise: 1, in: &v)
+            } else {
+                party.foodPacks = max(party.foodPacks - 5, 0)
+                v.said = ["THEY ATE THE FOOD AND WANDERED OFF."]
+                searchOn(&v)
+            }
+
+        // Battle (6200-6980).
+        case (.battle(var b), .fight):
+            b.round(rng: &rng)
+            settle(b, in: &v)
+        case (.battle(var b), .run):
+            let (words, away) = b.run(rng: &rng)
+            v.said = words
+            if away {
+                party.men -= b.ourLosses
+                v.stage = .finished          // the original leaves the ruin after a getaway
+            } else {
+                b.round(rng: &rng)
+                settle(b, in: &v)
+                v.said.insert(contentsOf: words, at: 0)
+            }
+        case (.spoils, .open):
+            openSpoils(&v)
+        case (.spoils, .goOn):
+            searchOn(&v)
+
+        case (.finished, .leave):
+            break
+        default:
+            break
+        }
+    }
+
+    /// 9710: another search, unless the searches are used up.
+    private mutating func searchOn(_ v: inout Visit) {
+        let left = (v.searchesLeft ?? 0) - 1
+        v.searchesLeft = left
+        v.stage = left < 0 ? .finished : .searching
+    }
+
+    private mutating func pitTrap(_ v: inout Visit) {
+        let n = min(1 + rng.rnd(3), party.men)
+        party.men -= n
+        v.said.append("PIT TRAP!")
+        v.stage = .pit(trapped: n)
+        if isLost { lose(&v) }
+    }
+
+    private mutating func meetMonsters(_ v: inout Visit) {
+        let m = Monster(kind: 1 + rng.rnd(16))
+        if rng.rnd(2) == 0 {
+            v.said = ["YOU'VE BEEN ATTACKED BY \(m.name)!"]
+            startBattle(m, theyWereSurprised: false, surprise: rng.rnd(3), in: &v)
+        } else {
+            v.stage = .monstersAhead(m)
+        }
+    }
+
+    private mutating func startBattle(_ m: Monster, theyWereSurprised: Bool, surprise: Int, in v: inout Visit) {
+        let b = Battle(monster: m, party: party, theyWereSurprised: theyWereSurprised, surprise: surprise, rng: &rng)
+        v.said.append(b.sizeUp)
+        settle(b, in: &v)
+    }
+
+    /// After a round: fight on, or count the dead.
+    private mutating func settle(_ b: Battle, in v: inout Visit) {
+        if b.isLost {
+            party.men = 0
+            lose(&v)
+        } else if b.isWon {
+            party.experience += 5
+            party.men -= b.ourLosses
+            v.said.append("CONGRATULATIONS! YOU KILLED ALL OF THE \(b.monster.name).")
+            v.stage = .spoils
+        } else {
+            v.stage = .battle(b)
+        }
+    }
+
+    /// 4000-4065: the monsters' chest.
+    private mutating func openSpoils(_ v: inout Visit) {
+        if rng.rnd(5) == 0 {
+            v.said.append("SOME POISONOUS SPORES WERE RELEASED FROM THE CHEST. YOUR PARTY WAS WEAKENED, BUT NO ONE WAS KILLED.")
+            party.strength = max(party.strength - 1, 1)
+            if rng.rnd(4) == 0 {
+                v.said.append("THERE IS NOTHING ELSE IN THE CHEST.")
+                searchOn(&v)
+                return
+            }
+        }
+        if rng.rnd(5) != 0 || rng.rnd(2) == 1 || rng.rnd(4) != 0 {
+            let gold = 500 + rng.rnd(500)
+            v.said.append("THERE ARE \(gold) QUADROONS OF GOLD IN THE CHEST!")
+            party.gold += gold
+        } else {
+            let item = Item(39 + rng.rnd(9))
+            gain(item)
+            v.said.append("THE CHEST CONTAINED A \(item.name).")
+            if rng.rnd(3) != 0 {
+                let gold = 700 + rng.rnd(1000)
+                v.said.append("THERE IS ALSO \(gold) QUADROONS OF GOLD!")
+                party.gold += gold
+            } else {
+                v.said.append("THERE IS NOTHING ELSE IN THE CHEST.")
+            }
+        }
+        searchOn(&v)
+    }
+
+    private mutating func lose(_ v: inout Visit) {
+        party.men = 0
+        v.stage = .finished
+        news.append(Expedition.allLost)
+    }
+
+    private mutating func gain(_ item: Item) {
+        party.inventory[item, default: 0] += 1
+    }
+}
