@@ -50,6 +50,7 @@ final class GameModel {
     private(set) var catacombWorld: CatacombWorld?
     private(set) var fortressWorld: FortressWorld?
     @ObservationIgnored private var nextCreep: Double = 0
+    @ObservationIgnored private var buildingCatacombs = false
     @ObservationIgnored var camera: PerspectiveCamera?
     @ObservationIgnored var updates: EventSubscription?
 
@@ -195,7 +196,9 @@ final class GameModel {
         case "WHIRLPOOL": e.rehearseVoyage(.whirlpool)
         case "RAFT": e.rehearseVoyage(question: .raft(men: 4))
         case "MERCHANTMEN": e.rehearseVoyage(question: .merchants)
-        case "TEMPLE": e.rehearseVoyage(.temple)
+        case "TEMPLE":
+            e.rehearseVoyage(.temple)
+            e.party.inventory[Item(47)] = 1
         case "CATACOMBS": e.rehearseBelow()
         case "ALTAR": e.rehearseBelow(altar: true)
         case "LAPOUR": e.rehearseLapour()
@@ -317,9 +320,13 @@ final class GameModel {
     /// landing party comes and goes; the quest's end leaves nothing to continue.
     private func prepareStage() {
         guard let e = expedition else { return }
-        if e.catacombs != nil, catacombWorld == nil {
-            catacombWorld = CatacombWorld(light: nil)
-            cameraFocus = nil
+        if e.catacombs != nil, catacombWorld == nil, !buildingCatacombs {
+            buildingCatacombs = true
+            Task {
+                catacombWorld = CatacombWorld(light: try? await WorldBuilder.darkness())
+                buildingCatacombs = false
+                cameraFocus = nil
+            }
         } else if e.catacombs == nil {
             catacombWorld = nil
         }

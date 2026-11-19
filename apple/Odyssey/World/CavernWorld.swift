@@ -32,8 +32,8 @@ final class CatacombWorld {
         root.addChild(maze)
         root.addChild(party.root)
         torch.light.color = .init(red: 1, green: 0.72, blue: 0.4, alpha: 1)
-        torch.light.intensity = 60000
-        torch.light.attenuationRadius = 18
+        torch.light.intensity = 600_000
+        torch.light.attenuationRadius = 30
         root.addChild(torch)
         for e in [frenzies, borer, altar, stairs, exit] {
             e.isEnabled = false
@@ -41,7 +41,8 @@ final class CatacombWorld {
         }
         // Only the faintest light from anywhere else.
         if let environment {
-            root.components.set(ImageBasedLightComponent(source: .single(environment), intensityExponent: -2.5))
+            root.components.set(ImageBasedLightComponent(source: .single(environment), intensityExponent: 0))
+            WorldBuilder.applyLightReceiver(root, light: root)
         }
     }
 
@@ -70,8 +71,8 @@ final class CatacombWorld {
         party.update(position: at, heading: heading, moving: moving, mount: nil, dt: dt) { _ in 0 }
 
         torch.isEnabled = c.light
-        torch.position = at + [0, 3.2, 0]
-        torch.light.intensity = 52000 + sin(clock * 13) * 5000 + sin(clock * 7.3) * 4000
+        torch.position = at + [0, 4.5, 0]
+        torch.light.intensity = 560_000 + sin(clock * 13) * 50_000 + sin(clock * 7.3) * 40_000
 
         show(frenzies, at: c.frenzies, lift: 1.2 + sin(clock * 9) * 0.2)
         frenzies.orientation = simd_quatf(angle: clock * 6, axis: [0, 1, 0])
@@ -92,6 +93,7 @@ final class CatacombWorld {
 
     /// The walls and the floors of the tiles laid out, as two meshes.
     private func rebuild(_ c: Catacombs) {
+        defer { WorldBuilder.applyLightReceiver(root, light: root) }
         builtWalls = c.walls
         builtLaid = c.laid
         maze.children.removeAll()
@@ -119,6 +121,7 @@ final class CatacombWorld {
         }
         for (k, v) in c.floor where sacks[k] == nil && v % 100 > 0 {
             let e = Bestiary.sack()
+            WorldBuilder.applyLightReceiver(e, light: root)
             e.scale = .init(repeating: 0.7)
             e.position = CatacombWorld.place(Double(k / 20 * 2) + 0.5, Double(k % 20 * 2) + 0.5)
             root.addChild(e)

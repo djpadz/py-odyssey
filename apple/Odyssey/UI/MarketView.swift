@@ -259,13 +259,15 @@ struct InventoryView: View {
     private func row(_ item: Item, _ quantity: Int) -> some View {
         GridRow {
             Text("\(quantity)").gridColumnAlignment(.trailing).monospacedDigit()
-            Text(item.name(quantity: quantity).lowercased()).font(.fell(17).smallCaps())
-                .underline(chosen == item)
+            Button { chosen = chosen == item ? nil : item } label: {
+                Text(item.name(quantity: quantity).lowercased()).font(.fell(17).smallCaps())
+                    .underline(chosen == item)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(item.name.capitalized)
             Text("\(item.weight * quantity)").gridColumnAlignment(.trailing).monospacedDigit().opacity(0.6)
         }
         .font(.fell(17))
-        .contentShape(Rectangle())
-        .onTapGesture { chosen = chosen == item ? nil : item }
     }
 
     @ViewBuilder

@@ -236,6 +236,19 @@ enum WorldBuilder {
         return water
     }
 
+    /// Next to no light at all, for underground: without it RealityKit lights the scene
+    /// evenly by itself.
+    static func darkness() async throws -> EnvironmentResource {
+        let w = 32, h = 16
+        var px = [UInt8](repeating: 255, count: w * h * 4)
+        for i in 0..<(w * h) {
+            px[i * 4] = 20
+            px[i * 4 + 1] = 18
+            px[i * 4 + 2] = 16
+        }
+        return try await EnvironmentResource(equirectangular: try cgImage(width: w, height: h, pixels: px))
+    }
+
     /// A gradient sky dome, which also lights the scene.
     static func makeSky() async throws -> (entity: Entity, environment: EnvironmentResource) {
         let w = 64, h = 32
