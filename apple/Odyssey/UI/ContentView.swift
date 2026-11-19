@@ -90,6 +90,11 @@ struct IslandView: View {
         .onAppear { focused = true }
         .onChange(of: model.inMarket) { focused = !model.inMarket }
         .onKeyPress(phases: [.down, .up]) { press in
+            // A walking key let go of is always heard, panel or no panel.
+            if press.phase == .up, let move = Self.move(for: press) {
+                model.held.remove(move)
+                return .handled
+            }
             guard !model.inMarket, !(model.visit?.holdsParty ?? false) else { return .ignored }
             let down = press.phase == .down
             if let move = Self.move(for: press) {

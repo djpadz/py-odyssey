@@ -7,6 +7,10 @@ struct VisitView: View {
     let model: GameModel
     let visit: Visit
     @State private var choosingItem = false
+    /// Whether the original's keys work yet. As in the original, a panel ignores keys
+    /// pressed before it appeared: with A held to walk west, a caravan's Attack mustn't
+    /// fire. They arm once every walking key is up, and a moment has passed.
+    @State private var armed = false
 
     var body: some View {
         Scroll {
@@ -31,6 +35,14 @@ struct VisitView: View {
         .frame(maxWidth: 480, alignment: .leading)
         .animation(.easeInOut(duration: 0.2), value: visit.stage)
         .onChange(of: visit.stage) { choosingItem = false }
+        .task(id: "\(visit.stage)\(visit.said)") {
+            armed = false
+            while !model.held.isEmpty {
+                try? await Task.sleep(for: .milliseconds(50))
+            }
+            try? await Task.sleep(for: .milliseconds(300))
+            if !Task.isCancelled { armed = true }
+        }
     }
 
     private var title: String {
@@ -54,13 +66,13 @@ struct VisitView: View {
         FlowRow {
             if visit.canUseItems {
                 Button("Use…") { choosingItem = true }
-                    .keyboardShortcut("u", modifiers: [])
+                    .keyboardShortcut(armed ? KeyboardShortcut("u", modifiers: []) : nil)
             }
             ForEach(visit.actions, id: \.self) { action in
                 // On the road, leaving at the end is just walking on.
                 let (label, key) = visit.site == nil && visit.stage == .finished ? ("Go on", "g") : Self.label(action)
                 Button(label) { model.act(action) }
-                    .keyboardShortcut(key, modifiers: [])
+                    .keyboardShortcut(armed ? KeyboardShortcut(key, modifiers: []) : nil)
             }
         }
         .buttonStyle(.borderedProminent)
