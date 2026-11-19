@@ -48,27 +48,87 @@ final class GameModel {
     @ObservationIgnored private var toastUntil: Double = 0
     @ObservationIgnored private var clock: Double = 0
 
-    func newQuest(seed: UInt64 = .random(in: 1...UInt64(UInt32.max)), meeting: String? = nil) {
-        phase = .loading
-        loadError = nil
+    /// Start a quest. One started from the command line (`--quest`) is for looking at
+    /// things, and doesn't save over the real one.
+    func newQuest(seed: UInt64 = .random(in: 1...UInt64(UInt32.max)), meeting: String? = nil, saves: Bool = true) {
         var expedition = Expedition(seed: seed)
         #if DEBUG
         if let meeting { GameModel.rehearse(meeting, in: &expedition) }
         #endif
+        start(expedition, saves: saves)
+        showingInventory = meeting?.lowercased() == "inventory"
+    }
+
+    /// P: take up the saved quest where it was left.
+    func continueQuest() {
+        do {
+            let saved = try JSONDecoder().decode(SavedQuest.self, from: Data(contentsOf: GameModel.saveURL))
+            var expedition = saved.quest
+            expedition.resume()
+            heading = saved.heading
+            start(expedition, saves: true)
+        } catch {
+            loadError = "The saved quest could not be read."
+        }
+    }
+
+    private func start(_ expedition: Expedition, saves: Bool) {
+        phase = .loading
+        loadError = nil
+        saving = saves
         self.expedition = expedition
+        if !saves { heading = 0 }
         Task {
             do {
                 world = try await WorldBuilder.build(expedition)
                 lastCell = nil
                 cameraFocus = nil
                 toast = nil
-                showingInventory = meeting?.lowercased() == "inventory"
+                showingInventory = false
                 phase = .playing
             } catch {
                 loadError = error.localizedDescription
                 phase = .title
             }
         }
+    }
+
+    // MARK: Saving
+
+    /// What goes in the save file.
+    private struct SavedQuest: Codable {
+        var version = 1
+        var quest: Expedition
+        var heading: Float
+    }
+
+    private static var saveURL: URL {
+        URL.applicationSupportDirectory.appending(components: "Odyssey", "quest.json")
+    }
+
+    /// Whether there is a quest to continue.
+    private(set) var hasSavedQuest = FileManager.default.fileExists(atPath: GameModel.saveURL.path)
+    @ObservationIgnored private var saving = true
+
+    /// Save the quest, if the party is free to be left: not haggling, not in the
+    /// middle of something.
+    func save() {
+        guard saving, phase == .playing, let e = expedition, e.isFree else { return }
+        do {
+            try FileManager.default.createDirectory(at: GameModel.saveURL.deletingLastPathComponent(),
+                                                    withIntermediateDirectories: true)
+            try JSONEncoder().encode(SavedQuest(quest: e, heading: heading)).write(to: GameModel.saveURL, options: .atomic)
+            hasSavedQuest = true
+        } catch {
+            print("Couldn't save the quest: \(error)")
+        }
+    }
+
+    /// The quest is over: there is nothing to continue.
+    private func forgetSave() {
+        guard saving else { return }
+        try? FileManager.default.removeItem(at: GameModel.saveURL)
+        hasSavedQuest = false
     }
 
     #if DEBUG
@@ -211,6 +271,7 @@ final class GameModel {
         guard let last = news.last else { return }
         if lost {
             phase = .lost(last)
+            forgetSave()
         } else {
             toast = news.joined(separator: " ")
             toastUntil = clock + 5
@@ -267,6 +328,7 @@ final class GameModel {
         if e.cell != lastCell || lying != lastLying {
             lastCell = e.cell
             lastLying = lying
+            save()
             siteHere = e.mount == nil ? e.site : nil      // sites wait until the party halts
             report = e.describe()
         } else if lookingUntil > 0 && clock > lookingUntil {

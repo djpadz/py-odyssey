@@ -27,8 +27,8 @@ public struct Trap: Hashable, Sendable {
 }
 
 /// Something in the way (3000-3400) until the right thing clears it (U1-U3).
-public struct Obstacle: Hashable, Sendable {
-    public enum Kind: Sendable { case ravine, thicket, bog, crevasse, cliff }
+public struct Obstacle: Hashable, Sendable, Codable {
+    public enum Kind: Sendable, Codable { case ravine, thicket, bog, crevasse, cliff }
 
     public let kind: Kind
     public let words: String

@@ -1,7 +1,7 @@
 /// The island commands besides walking (lines 760-830, 8100-8180): get, drop, ride,
 /// halt, and using things, magic above all.
 
-public enum Mount: Sendable, Equatable {
+public enum Mount: Sendable, Equatable, Codable {
     case horses
     case rug
 }

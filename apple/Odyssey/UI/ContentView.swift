@@ -3,6 +3,7 @@ import SwiftUI
 
 struct ContentView: View {
     let model: GameModel
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         ZStack {
@@ -19,13 +20,14 @@ struct ContentView: View {
             }
         }
         .animation(.easeInOut(duration: 0.6), value: model.phase)
+        .onChange(of: scenePhase) { if scenePhase != .active { model.save() } }
         .onAppear {
             // `--quest <seed>` skips the title and replays that island.
             let args = ProcessInfo.processInfo.arguments
             if let i = args.firstIndex(of: "--quest"), i + 1 < args.count, let seed = UInt64(args[i + 1]),
                model.phase == .title {
                 let meet = args.firstIndex(of: "--meet").flatMap { $0 + 1 < args.count ? args[$0 + 1] : nil }
-                model.newQuest(seed: seed, meeting: meet)
+                model.newQuest(seed: seed, meeting: meet, saves: false)
             }
         }
     }

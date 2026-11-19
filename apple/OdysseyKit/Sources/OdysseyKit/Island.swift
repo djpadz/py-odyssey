@@ -35,7 +35,7 @@ public enum Site: Int, Sendable, CaseIterable {
     }
 }
 
-public struct Cell: Hashable, Sendable {
+public struct Cell: Hashable, Sendable, Codable {
     public let col: Int
     public let row: Int
 
@@ -60,7 +60,27 @@ public struct Cell: Hashable, Sendable {
     public var isOnMap: Bool { (0..<Island.size).contains(col) && (0..<Island.size).contains(row) }
 }
 
-public struct Island: Sendable {
+public struct Island: Sendable, Codable {
+    private enum CodingKeys: String, CodingKey { case lc, startX, startY, obstacles }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        lc = try c.decode([Int].self, forKey: .lc)
+        guard lc.count == Island.size * Island.size + 1 else {
+            throw DecodingError.dataCorruptedError(forKey: .lc, in: c, debugDescription: "the map has \(lc.count) cells")
+        }
+        start = (try c.decode(Double.self, forKey: .startX), try c.decode(Double.self, forKey: .startY))
+        obstacles = try c.decode([Cell: Obstacle].self, forKey: .obstacles)
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(lc, forKey: .lc)
+        try c.encode(start.x, forKey: .startX)
+        try c.encode(start.y, forKey: .startY)
+        try c.encode(obstacles, forKey: .obstacles)
+    }
+
     public static let size = 20
     public static let cellWidth = 14.0
     public static let cellHeight = 8.0

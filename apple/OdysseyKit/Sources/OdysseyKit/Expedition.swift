@@ -1,5 +1,5 @@
 /// The adventurer and the men who follow (rolled as in HAIL, lines 32-33).
-public struct Party: Sendable {
+public struct Party: Sendable, Codable {
     public var men = 10
     /// What the party carries, food and quadroons included (the original's BG/BQ).
     public var inventory: [Item: Int]
@@ -49,7 +49,14 @@ public struct Party: Sendable {
 }
 
 /// A quest in progress: the island, the party, and where the party stands.
-public struct Expedition: Sendable {
+///
+/// It saves as `Codable`: where the party stands and all it has done to the island,
+/// but not a market or an encounter in progress (save when `isFree`), nor news.
+public struct Expedition: Sendable, Codable {
+    private enum CodingKeys: String, CodingKey {
+        case seed, island, party, x, y, rng, walked, turns, hungryRations, mount, seen
+    }
+
     public let seed: UInt64
     public internal(set) var island: Island
     public var party: Party
@@ -76,6 +83,12 @@ public struct Expedition: Sendable {
     public internal(set) var mount: Mount?
     /// Sites the party has seen, and obstacles it has met: what the map shows.
     public internal(set) var seen: Set<Cell> = []
+
+    /// After loading: step up to the site underfoot again, if the party was at one.
+    public mutating func resume() {
+        lookAround()
+        if mount == nil { arrive() }
+    }
 
     public init(seed: UInt64) {
         self.seed = seed

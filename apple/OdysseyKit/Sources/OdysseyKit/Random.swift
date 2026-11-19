@@ -1,5 +1,5 @@
 /// A small seedable generator (SplitMix64) so a quest can be replayed from its seed.
-public struct SeededRandom: RandomNumberGenerator, Sendable {
+public struct SeededRandom: RandomNumberGenerator, Sendable, Codable {
     private var state: UInt64
 
     public init(seed: UInt64) { state = seed }

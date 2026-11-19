@@ -41,3 +41,18 @@ public struct Item: Hashable, Sendable, Comparable, CustomStringConvertible {
 
     public static func < (a: Item, b: Item) -> Bool { a.id < b.id }
 }
+
+extension Item: Codable {
+    public init(from decoder: any Decoder) throws {
+        let id = try decoder.singleValueContainer().decode(Int.self)
+        guard (1...49).contains(id) else {
+            throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "no item \(id)"))
+        }
+        self.init(id)
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var c = encoder.singleValueContainer()
+        try c.encode(id)
+    }
+}

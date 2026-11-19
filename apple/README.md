@@ -38,6 +38,7 @@ The rules have their own tests: `cd apple/OdysseyKit && swift test`.
 | Pick up what lies here | G, or the button | button |
 | Ride the horses / come down | R (or H to halt) | Ride / Halt button |
 | Map (enlarge it) | click the map | tap the map |
+| New quest / continue the saved one (title) | N / P | buttons |
 | City market | Return or M at a city | button |
 | At a site | the original's keys: U use, S search, G get, O open, A attack, F fight, R run, L leave… | buttons |
 
@@ -88,6 +89,9 @@ Map pixels (the original's 280×160 island coordinates) are the rules' unit of p
   Riding into the sea drowns two horses.
 - Things lying about: one step in thirty on bare ground turns up something, and the party can
   drop things and pick them up again. A sack marks the spot.
+- Saving: the quest saves itself whenever the party moves to a new cell or does something, and
+  when the app goes to the background or quits; the title offers to continue it. Losing the
+  quest deletes the save. Quests started with `--quest` don't save.
 - The status report (the original's C) in the inventory panel, and an inset map that marks
   each site once it has come into sight, as the original drew them on its map.
 
@@ -108,8 +112,9 @@ Map pixels (the original's 280×160 island coordinates) are the rules' unit of p
 - Horses are stopped by obstacles (the original rides through them); the rug flies over.
 - The rug won't land on the water.
 - Magic is used on the road, not at a site's door or in a trap.
+- The quest saves itself, rather than when you quit and say so, and only while the party is free:
+  continuing after a quit mid-battle or mid-haggle starts from just before it.
 
 ## Next
 
-1. Saving and resuming a quest (including the obstacles, which live outside the map array).
-2. The ship and the sea voyage, the catacombs, and the Caliph's fortress.
+1. The ship and the sea voyage (SEA APVENTURE), then the catacombs, and the Caliph's fortress.

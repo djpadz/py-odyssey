@@ -24,12 +24,22 @@ struct TitleView: View {
                         .font(.fell(20))
                         .foregroundStyle(Color.parchment)
                         .multilineTextAlignment(.center)
-                    Button { model.newQuest() } label: {
-                        Text("Begin a New Quest").font(.fell(22)).padding(.horizontal, 18).padding(.vertical, 6)
+                    // The original's N for a new quest, P to continue a saved one.
+                    HStack(spacing: 16) {
+                        if model.hasSavedQuest {
+                            Button { model.continueQuest() } label: {
+                                Text("Continue the Quest").font(.fell(22)).padding(.horizontal, 18).padding(.vertical, 6)
+                            }
+                            .tint(Color(red: 0.55, green: 0.12, blue: 0.10))
+                            .keyboardShortcut("p", modifiers: [])
+                        }
+                        Button { model.newQuest() } label: {
+                            Text("Begin a New Quest").font(.fell(22)).padding(.horizontal, 18).padding(.vertical, 6)
+                        }
+                        .tint(model.hasSavedQuest ? Color.ink.opacity(0.8) : Color(red: 0.55, green: 0.12, blue: 0.10))
+                        .keyboardShortcut("n", modifiers: [])
                     }
                     .buttonStyle(.borderedProminent)
-                    .tint(Color(red: 0.55, green: 0.12, blue: 0.10))
-                    .keyboardShortcut(.defaultAction)
                     if let error = model.loadError {
                         Text(error).font(.callout).foregroundStyle(.red)
                     }
