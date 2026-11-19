@@ -1,0 +1,36 @@
+name: Odyssey
+options:
+  bundleIdPrefix: net.heru
+  deploymentTarget:
+    iOS: "26.0"
+    macOS: "26.0"
+packages:
+  OdysseyKit:
+    path: OdysseyKit
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MARKETING_VERSION: "0.1"
+    CURRENT_PROJECT_VERSION: "1"
+targets:
+  Odyssey:
+    type: application
+    supportedDestinations: [iOS, macOS]
+    sources:
+      - path: Odyssey
+    dependencies:
+      - package: OdysseyKit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: net.heru.odyssey
+        PRODUCT_NAME: Odyssey
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: Odyssey
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.adventure-games
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown
+        TARGETED_DEVICE_FAMILY: "1,2"
+        ENABLE_HARDENED_RUNTIME: YES
+        ENABLE_APP_SANDBOX: YES
+        CODE_SIGN_STYLE: Automatic
